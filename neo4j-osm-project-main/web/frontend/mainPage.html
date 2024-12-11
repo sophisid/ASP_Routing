@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Openrouting service With Neo4j</title>
+  <link rel="shortcut icon" href="#" />
+  <!-- CSS for leaflet and leaflet-geoman plugin -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.2/dist/leaflet.css"
+    integrity="sha256-sA+zWATbFveLLNqWO2gtiw3HL/lh1giY/Inf1BJ0z14="
+    crossorigin=""
+  />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css"
+  />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+  <!-- Load JavaScript for leaflet, leaflet-geoman plugin, turf.js, and neo4j-driver -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.2/dist/leaflet.js"
+    integrity="sha256-o9N1jGDZrf5tS+Ft4gbIK7mYMipq9lqpVJ91xHSyKhg="
+    crossorigin=""
+  ></script>
+  <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+  <script src="https://unpkg.com/neo4j-driver"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/neo4j-driver"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-polylinedecorator/dist/leaflet.polylineDecorator.js"></script>
+  <link rel="stylesheet" type="text/css" href="style.css">
+  <!-- Include Select2 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/select2/dist/css/select2.min.css" rel="stylesheet" />
+  <!-- Include Select2 JS -->
+  <!-- Make sure to include jQuery before Select2, as it is a dependency -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2/dist/js/select2.min.js"></script>
+</head>
+<body>
+
+<input type="file" id="importNodesFileInput" accept=".csv" style="display: none;" />
+<input type="file" id="importVehiclesFileInput" accept=".csv" style="display: none;" />
+
+<div id="confirmationDeleteModal" class="modal">
+  <div class="confirm-modal-content">
+    <div class="confirm-modal-title">
+      <i class="fas fa-exclamation-triangle"></i>
+        <span>Warning</span>
+    </div>
+    <p id="confirmationModalMessage">All the previous nodes will be deleted! Are you sure?</p>
+    <div class="modal-buttons">
+      <button class="confirm-warning-button" id="confirmDeleteBtn">Yes</button>
+      <button class="confirm-warning-button" id="cancelDeleteBtn">No</button>
+    </div>
+  </div>
+</div>
+
+<div id="menu-bar">
+  <ul id="menu-list">
+    <!-- <li id="home-container" class="menu-item">
+      <div class="tooltip">
+        <a href="./homePage.html" class="white-button">
+          <i class="fas fa-home"></i>
+        </a>
+        <span class="tooltiptext">Return to Home Page</span>
+      </div>
+    </li> -->
+    <li class="menu-item">
+      <button id="actions-button"><i class="fas fa-tools"></i> Actions</button>
+      <div class="menu-button-group" id="actions-button-group">
+        <button id="deleteAllNodesButton" type="button"><i class="fas fa-trash-alt"></i> Delete All Stops</button>
+        <button id="deleteAllVehiclesButton" type="button"><i class="fas fa-trash-alt"></i> Delete All Vehicles</button>
+      </div>
+    </li>
+    <li class="menu-item">
+      <button id="openConfigButton"><i class="fas fa-cog"></i> Vehicle Configuration</button>
+    </li>
+    <li class="menu-item">
+      <button id="findroutes-button" type="button"><i class="fas fa-route"></i> Find Routes</button>
+      <div class="menu-button-group" id="findroutes-button-group">
+        <button id="findRoutesClingoButton" type="button"><i class="fas fa-search"></i> Find Routes (Clingo Reasoner)</button>
+      </div>
+    </li>  
+  </ul>
+</div>
+<style>
+  hr {
+      border: none;
+      border-top: 1px solid rgba(255, 255, 255, 0.2); /* Adjust the opacity and color here */
+      margin: 20px 0; /* Adjust margin as needed */
+  }
+</style>
+
+</body>
+</html>
+
+
+<div id="popupModal" class="mess">
+  <div class="mess-content">
+    <div id="popupMessageContent"></div>
+  </div>
+</div>
+
+<div id="routeInfo" class="route-info"></div>
+
+<div id="map" style="width: 100%; height: 100%"></div>
+
+<!-- The vehicle configuration modal HTML structure -->
+<div id="vehicleConfigModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <div class="modal-title"><i class="fas fa-car-side"></i> Vehicle Configuration</div>
+      <span class="close" id="closeVehicleConfigXButton">&times;</span>
+    </div>
+    <form id="vehicleConfigForm">
+      <div class="label">Number of Vehicles:
+        <div class="tooltip">
+          <i class="fas fa-info-circle"></i>
+          <span class="tooltiptext">
+            Enter the total number of vehicles you want to configure. The allowed range is from 1 to 3.
+          </span>
+        </div>
+      </div>
+      <input type="number" id="numVehicles" name="numVehicles" min="1" max="3" required placeholder="Enter a number between 1 and 3">
+      
+      <br>
+      <div id="vehicleConfigs"></div> <!-- This will dynamically generate only the capacity field -->
+
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="submit" class="submit-button">Apply</button>
+        <span class="close-text" id="closeVehicleConfigModal">Close</span>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="customModal" class="modal">
+  <div class="modal-content">
+    <!-- <span class="close" id="closeCustomModal">&times;</span> -->
+    <!-- <div class="modal-title">Create a Stop <span id="nearestHighwaySpan"></span></div> -->
+    <div class="modal-header">
+      <div class="modal-title">
+        <i class="fas fa-map-marker-alt" style="color: #ca263a; font-size: 24px; margin-right: 8px;"></i>&nbsp;Create a Stop<span id="nearestHighwaySpan"> &nbsp;</span>
+        <span class="close" id="closeCreateStopXButton">&times;</span>
+      </div>  
+    </div>
+    <div class="label">Name*:
+      <div class="custom-tooltip">
+          <i class="fas fa-info-circle"></i>
+          <span class="tooltiptext custom-tooltiptext">
+            Enter the name of the stop to be inserted on the map.
+          </span>
+      </div>
+    </div>
+    <input type="text" class="styled-input" id="name" placeholder="Enter name">
+    <div id="nameErrorMessage" class="error-message"></div>
+
+    <select id="color" style="display: none;">
+    <option value="">default</option>
+      <option value="yellow">Yellow</option>
+      <option value="green">Green</option>
+      <option value="orange">Orange</option>
+    </select>
+    
+    <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
+      <button id="createNodeButton">Create Stop</button>
+      <span class="close-text" id="closeCustomModal">Close</span>
+    </div>
+  </div>
+</div>
+<!-- Modal displayed when waiting to retrieve answers to routes from Clingo -->
+<div id="clingoTimeoutModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-body">
+      <div class="spinner-centered">
+        <div class="loading-spinner"></div>  <!-- the svg -->
+        <div><h2>Loading Answer Sets from Clingo...</h2></div>
+        <div><h5>Suboptimal answer set found...</h5></div>
+        <button id="clingoStopBtn">Stop execution</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Custom warning container -->
+<div id="customWarning" class="custom-warning">
+  <div class="custom-warning-box">
+    <div class="custom-warning-title">
+      <i class="fas fa-exclamation-triangle"></i>
+      <span>Warning</span>
+    </div>
+    <p id="customWarningMessage">This is a custom warning message.</p>
+    <button class="custom-warning-button" id="customWarningCloseButton">OK</button>
+  </div>
+</div>
+<!-- Custom Modal HTML for Node Deletion Confirmation -->
+<div id="deleteNodeConfirmationPopup" class="custom-modal">
+  <div class="custom-modal-content">
+    <div class="custom-modal-header">      
+      <div class="custom-modal-title"><i class="fa fa-exclamation-triangle"></i>Confirm Node Deletion</div>     
+      <span class="custom-close-button" onclick="closeDeleteNodeConfirmationPopup()">&times;</span>
+    </div>
+    <hr class="custom-divider">
+    <p>Are you sure you want to delete all nodes?</p>
+    <div class="custom-modal-footer" style="justify-content:center;">
+      <button id="confirmNodeDeleteAction" class="custom-modal-button apply-button">Yes</button>
+      <button id="cancelNodeDeleteAction" class="custom-modal-button close-button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Custom Modal HTML for Vehicle Deletion Confirmation -->
+<div id="deleteConfirmationPopup" class="custom-modal">
+  <div class="custom-modal-content">
+    <div class="custom-modal-header">
+      <div class="custom-modal-title"><i class="fa fa-exclamation-triangle"></i>Confirm Vehicle Deletion</div>     
+      <span class="custom-close-button">&times;</span>
+    </div>
+    <hr class="custom-divider">
+    <p>Are you sure you want to delete all vehicles?</p>
+    <div class="custom-modal-footer" style="justify-content:center;">
+      <button id="confirmDeleteAction" class="custom-modal-button apply-button">Yes</button>
+      <button id="cancelDeleteAction" class="custom-modal-button close-button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+  <script type="module" src="../actions.js"></script>
+  <script type="module" src="../tools.js"></script>
+  <script type="module" src="../vehicleConf.js"></script>
+  <script type="module" src="../clingoConf.js"></script>
+  <script type="module" src="../main.js"></script>
+  <script>   
+    document.getElementById('closeCreateStopXButton').onclick = function() {
+    document.getElementById('customModal').style.display = 'none';  // Corrected ID
+    };
+
+    document.getElementById('closeVehicleConfigXButton').onclick = function() {
+    document.getElementById('vehicleConfigModal').style.display = 'none';
+    };
+
+    document.getElementById('closeCustomModal').onclick = function() {
+    document.getElementById('customModal').style.display = 'none';
+    };
+
+    window.onclick = function(event) {
+      if (event.target == document.getElementById('deleteNodeModal')) {
+        document.getElementById('deleteNodeModal').style.display = 'none';
+      }
+      if (event.target == document.getElementById('deleteVehicleModal')) {
+        document.getElementById('deleteVehicleModal').style.display = 'none';
+      }     
+      if (event.target == document.getElementById('clingoConfigModal')) {
+        document.getElementById('clingoConfigModal').style.display = 'none';
+      }
+      if (event.target == document.getElementById('clingoTimeoutModal')) {
+        document.getElementById('clingoTimeoutModal').style.display = 'none';
+      }
+
+    };
+
+    document.getElementById('numVehicles').addEventListener('input', function() {
+    var numVehicles = this.value;
+    var errorElement = document.getElementById('numVehiclesError');
+      
+      if (numVehicles < 1) {
+          this.value = 1; // Automatically set to 1 if the user enters a value less than 1
+          errorElement.style.display = 'block';
+          errorElement.textContent = 'Value adjusted to 1. The number must be between 1 and 3.';
+      } else if (numVehicles > 3) {
+          this.value = 3; // Automatically set to 3 if the user enters a value greater than 3
+          errorElement.style.display = 'block';
+          errorElement.textContent = 'Value adjusted to 3. The number must be between 1 and 3.';
+      // } else {
+      //     errorElement.style.display = 'none'; // Hide the error message if the value is valid
+      }
+    });
+
+    // Get the modal and its content
+    var vehicleConfigModal = document.getElementById('vehicleConfigModal');
+    var vehicleConfigContent = vehicleConfigModal.querySelector('.modal-content');
+
+    // Function to close the modal when clicking outside of it
+    function closeVehicleModalOnClickOutside(event) {
+        if (!vehicleConfigContent.contains(event.target)) {
+            vehicleConfigModal.style.display = 'none';
+        }
+    }
+
+    // Open the modal
+    document.getElementById('openConfigButton').addEventListener('click', function() {
+        vehicleConfigModal.style.display = 'block';
+        // Add event listener to close the modal when clicking outside
+        document.addEventListener('mousedown', closeVehicleModalOnClickOutside);
+    });
+
+    // Close the modal when clicking on the 'X' button
+    document.getElementById('closeVehicleConfigXButton').addEventListener('click', function() {
+        vehicleConfigModal.style.display = 'none';
+        document.removeEventListener('mousedown', closeVehicleModalOnClickOutside);
+    });
+
+    // Close the modal when clicking on the "Close" button inside the modal
+    document.getElementById('closeVehicleConfigModal').addEventListener('click', function() {
+        vehicleConfigModal.style.display = 'none';
+        document.removeEventListener('mousedown', closeVehicleModalOnClickOutside);
+    });
+    
+    const minimizeInput = document.getElementById('minimizeTimepointForAllPlandToEnd');
+
+  </script>
+  
+  </body>
+  </html>

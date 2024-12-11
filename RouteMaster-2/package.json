@@ -1,0 +1,25 @@
+{
+  "name": "routemaster",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon app.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NenaBas/RouteMaster.git"
+  },
+  "author": "Nena Basina",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "esm": "^3.2.25",
+    "express": "^4.19.2",
+    "inflected": "^2.1.0",
+    "leaflet": "^1.9.4",
+    "neo4j-driver": "^5.18.0",
+    "nodemon": "^3.1.0"
+  }
+}

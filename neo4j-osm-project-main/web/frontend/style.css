@@ -1,0 +1,1374 @@
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font: 16px Arial;
+    }
+
+    .red-marker {
+      background-color: red;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+    }
+    .yellow-marker {
+      background-color: yellow;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+    }
+    .green-marker {
+      background-color: yellow;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+    }
+    .orange-marker {
+      background-color: yellow;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0, 0, 0, 0.5);
+    }
+
+.modal-content {
+    background-color: #F8EEE5;
+    background-size: cover;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 50%;
+    border-radius: 20px;
+    box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2);
+    position: relative;
+    max-height: 90vh!important;
+    overflow-y: auto;
+}
+
+.modal-title {
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  text-align:center;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 1rem;
+  margin-top: 1rem;
+  color: black;
+}
+
+.modal-title .fa-location-dot {
+  margin-right: 10px; /* Adjust the space as needed */
+  color: #CA263A;
+  font-size:30px;
+  line-height:50px;
+  vertical-align: middle;
+}
+
+.close {
+  background-color: #31626B;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  font-size: 16px;
+  font-weight: 500;
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  margin-left: 10px;
+}
+
+.close:hover, .close:focus {
+  background-color: #ABC9CB;
+  color: white;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+    /* Style for the map */
+    #map {
+      z-index: 0; 
+      width: 100%;
+      height: calc(100% - 70px)!important;
+      cursor: pointer;
+
+    }
+    #map-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1; /* Ensure it's above other content */
+    }
+
+    /* Style for select dropdown */
+    select {
+  width: 100%;
+  padding: 10px;
+  margin-top: 5px;
+  margin-bottom: 15px;
+  font-size: 16px;
+  border: 1px solid #ccc; 
+  border-radius: 5px;
+}
+
+    /* Reduce the width of the color select dropdown */
+    select#color {
+      width: auto; 
+    }
+
+    /* Style for the "Create Node" button */
+    #createNodeButton {
+      background-color: #31626B;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      font-size: 16px;
+
+      /*css to align button "Create Stop" and adding some space to top and bottom*/
+      /* margin-left: auto; */
+      /* display: flex; */
+      flex-direction: column;
+      justify-content: flex-end;
+      margin-top: 10px;
+      margin-bottom: 10px;
+    }
+    /* Change the button color on hover */
+    #createNodeButton:hover {
+      background-color: #ABC9CB;
+    }
+
+    /* Style for the labels and their container */
+    .label-container {
+      background-color: #f4f4f4; 
+      padding: 10px; 
+      border-radius: 5px; 
+      margin-bottom: 10px; 
+    }
+
+    .label {
+      /*font-weight: bold;*/
+      margin-bottom: 5px;
+      color: #333;
+      font-size: 14px;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      background-color: #31626B;
+      border-radius: 20px;
+      color: white;
+      padding: 5px 10px;
+      display: inline-block;
+      width: auto;
+      margin-top: 10px;
+    }
+
+
+    
+    /* Style for input fields */
+    input[type="number"],
+    input[type="time"],
+    select {
+      width: 100%;
+      background-color: #ABC9CB;
+      padding: 10px;
+      margin-top: 5px;
+      margin-bottom: 15px;
+      font-size: 12px;
+      border: 1px solid #ccc; 
+      border-radius: 20px;
+
+    }
+
+    /* CSS to style the error message */
+    .error-message {
+      color: red;
+      font-size: 12px;
+      margin-top: 5px;
+    }
+
+    .route-info {
+      position: absolute;
+      top: 20px; 
+      right: 20px; 
+      display: flex;
+      flex-direction: column;
+    }
+
+    .route-info-square {
+      background-color: #007BFF; 
+      color: white;
+      padding: 5px;
+      margin-bottom: 5px;
+      border-radius: 5px;
+      text-align: right;
+      font-weight: bold;
+    }
+
+    .submit-button {
+  background-color: #4caf50;
+  color: white;
+  padding: 10px 15px;
+  border: none;
+  cursor: pointer;
+  margin-top: 10px;
+  border-radius: 5px;
+  transition: background-color 0.3s ease;
+}
+
+.submit-button:hover {
+  background-color: #abc9cb;
+}
+
+/* Style for the menu bar */
+#menu-bar {
+  /* position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background-color: #333;
+  color: white;
+  padding: 5px;  */
+ /* z-index: 2;  Ensure it's above the map */
+  
+  display: flex;
+  align-items: center;
+  background-color: #333;
+  padding: 10px;
+  
+}
+
+#menu-list {
+  /* list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center; */
+  
+  list-style-type: none;
+  display: flex;
+  padding: 0;
+  margin: 0;
+  /* justify-content: flex-start;  */
+  align-items: center;
+  /* flex-grow: 1; */
+  width: 100%;
+}
+
+.menu-item {
+  margin-right: 20px;
+  margin-left: 30px;
+  position:relative;
+}
+
+/* .menu-item {
+  margin-right: 10px;
+  position: relative;
+} */
+.menu-item:last-child {
+  margin-right: 0; /* Remove margin for the last item */
+}
+
+#menu-list button {    
+  border: none;
+  border-radius: 5px;
+  transition: background-color 0.3s ease;
+  display: block;
+  width: 100%;
+  height: 100%; 
+  border: none;
+  background-color: rgba(0, 0, 0, 0);
+  color: white;
+  padding: 18px 30px;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: start;
+}
+
+#menu-list button:hover {
+  background-color: #444; 
+}
+
+.menu-button-group {
+  display: none;
+  position: absolute; 
+  top: 100%; 
+  left: 0;
+  background-color: #555; 
+  border-radius: 5px;
+  z-index: 1; 
+}
+
+.menu-item:hover .menu-button-group {
+  display: block; 
+}
+#menu-list .menu-item#refresh-button {
+  margin-left: auto; 
+}
+
+/* these are for the alert to delete all nodes */
+#confirmDeleteBtn,
+#cancelDeleteBtn {
+  margin: 10px;
+}
+
+#deleteNodeModal button, #deleteVehicleModal button {
+  background-color: #f44336;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  cursor: pointer;
+  margin-top: 10px;
+  border-radius: 20px;
+  transition: background-color 0.3s ease;
+  font-size: 16px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  float: right;
+}
+
+#deleteNodeModal button:hover, #deleteVehicleModal button:hover {
+  background-color: #d32f2f;
+}
+#deleteNodeModal #deleteNodeFeedback {
+  color: red;
+  font-size: 12px;
+  margin-top: 5px;
+}
+/* Style for the modal container */
+.mess {
+  display: none;
+  position: fixed;
+  z-index: 1;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Style for the modal content */
+.mess-content {
+  background-color: #fefefe;
+  margin: 15% auto;
+  padding: 10px; 
+  border: 1px solid #888;
+  width: 40%; 
+  height: auto; 
+  max-height: 70%; 
+  border-radius: 10px;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+/* Style for the message content inside the modal */
+#popupMessageContent {
+  font-size: 14px; 
+}
+
+
+/* Style for the close button */
+.close {
+  float: right;
+  font-size: 14px;
+  font-weight: bold;
+  background-color: #31626B;
+  color: #444;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  font-size: 16px;
+  font-weight:500;
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  margin-left: 10px;
+}
+.close:hover, .close:focus {
+  background-color: #ABC9CB; 
+  color: #444;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* CSS for the time window inputs */
+.time-window-inputs {
+  display: flex; 
+  align-items: center; 
+}
+
+.time-window-inputs input[type="time"] {
+  width: 50%; 
+  margin-right: 10px; 
+  
+}
+
+.time-window-separator {
+  margin: 0 5px; 
+}
+.time-window-group {
+  display: flex;
+  align-items: center;
+}
+
+.node-group {
+  display: flex;
+  align-items: center;
+}
+
+.node-label {
+  margin-right: 5px;
+  /* margin-left: 5px; */
+}
+
+
+.yellow-background {
+  background-color: yellow;
+}
+
+.green-background {
+  background-color: green;
+}
+
+.orange-background {
+  background-color: orange;
+}
+
+.white-button {
+  color: white;
+  text-decoration: none; /* Optional: Remove underlines for links */
+  display: flex;
+  align-items: center;
+}
+
+#home-button a {
+  font-size: 18px; /* Adjust font size to match other icons */
+  padding: 8px 16px; /* Adjust padding to match other buttons */
+}
+#home-button a i {
+  font-size: 16px; /* Increase icon size */
+}
+ /* Style for the custom warning */
+ .custom-warning {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  justify-content: center;
+  align-items: center;
+}
+
+.custom-warning-box {
+  background-color: #F8EEE5;
+  color: #333;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 18px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+.custom-warning-text{
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    margin-top: 30px;
+    line-height: 1.4;
+}
+
+.custom-warning-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #31626b;
+}
+
+.custom-warning-image {
+  width: 50px;
+  height: 50px;
+  margin-bottom: 20px;
+}
+
+/* Style for the OK button */
+.custom-warning-button {
+  background-color: #31626b;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 16px;
+  margin-top: 20px;
+  transition: background-color 0.3s ease;
+  width: 100%;
+}
+
+.custom-warning-button:hover {
+  background-color: #ABC9CB;
+}
+#home-button {
+  display: flex;
+  align-items: center;
+}
+/* Style for the home button */
+.menu-item#home-button {
+  margin-left: auto; 
+}
+/*Enter a name css changes*/
+.styled-input {
+  width: 100%;
+  background-color: #ABC9CB;
+  padding: 10px;
+  margin-top: 5px;
+  margin-bottom: 15px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 20px;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+}
+/* Line separator between two elements */
+.separator {
+  border: none; /* Remove default border */
+  border-top: 1px solid black;
+  height: 1px; 
+  background-color: black;
+  margin-top: 10px; 
+  margin-bottom: 30px;
+  margin-left: -20px;
+  margin-right: -20px;
+}
+.modal-footer {
+  display: flex;
+  justify-content: flex-end; /* Align items to the right */
+  align-items: center; /* Center items vertically */
+}
+
+.close, .submit-button {
+  background-color: #31626B;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  font-size: 16px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.modal-title .fa-car-side {
+  margin-right: 10px;
+  color: #CA263A;
+  font-size: 25px;
+}
+
+.form-group{
+  margin-top:5px;
+  display: flex;
+  align-items: center;
+}
+
+.content {
+  background-color:white;
+  position: relative;
+  z-index: 10; /* Ensures the content is above the video */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh; /* Full viewport height */
+  color: white; /* Ensures text is visible over the video */
+  text-align: center;
+}
+
+.my-custom-tooltip {
+  background-color: #F8EEE5;
+  border-radius: 8px;
+  padding: 10px; /* some padding inside the tooltip */
+  /* box-shadow: 3px 3px 6px rgba(0,0,0,0.1); */
+  color: #333; /* text color */
+  font-size: 14px; /* text size */
+  line-height: 1.4; /* line height for better readability */
+  border: none;
+}
+
+.my-custom-tooltip > h3 {
+  margin-top: 0;
+  padding-top: 0;
+  text-align: center;
+}
+
+.my-custom-tooltip > div {
+  text-align: left; 
+}
+
+.fa-exclamation-triangle{
+  color:#CA263A;
+}
+
+#nearestHighwaySpan {
+  margin-left: 8px; /* Adjust the value to get the desired spacing */
+}
+.menu-item button, .menu-item a {
+  color: white;
+  background: none;
+  border: none;
+  cursor: pointer;
+  /* font-size: 14px; */
+}
+
+
+body { overflow:hidden; font-family: Arial, sans-serif; margin: 0; }
+  #menu-bar { background-color: #333; padding: 10px 0; position: relative; z-index: 2; }
+  #menu-list { list-style-type: none; margin: 0; padding: 0 10px; display: flex; }
+  .menu-item { margin-right: 30px; position: relative; }
+  .menu-item button { background-color: transparent; color: #fff; border: none; padding: 10px 20px; cursor: pointer; transition: background-color 0.3s ease; }
+  .menu-item button:hover { background-color: rgba(255, 255, 255, 0.1); }
+  .menu-button-group {
+    display: none;
+    position: absolute;
+    background-color: #333;
+    min-width: 250px;
+    width: auto;
+    white-space: nowrap;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+    z-index: 1;
+    border-radius: 5px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s, transform 0.3s ease;
+    border: 1px solid #666;
+    top: 50px; /* Adjust this value as needed to lower the dropdown */
+    left: 0;
+    transform: translateY(-20px);
+  }
+  .menu-item:hover .menu-button-group {
+    display: block;
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+  .menu-button-group button {
+    display: flex;
+    align-items: center;
+    background-color: #333;
+    color: #fff;
+    border: none;
+    padding: 15px 25px;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  .menu-button-group button:hover { background-color: rgba(255, 255, 255, 0.1); }
+  .menu-button-group button i { margin-right: 10px; }
+
+  /* Style for the ConfirmDelete modal */
+.confirm-warning-button {
+  background-color: #31626b;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 16px;
+  margin-top: 20px;
+  transition: background-color 0.3s ease;
+}
+.confirm-warning-button:hover {
+  background-color: #ABC9CB;
+}
+
+.confirm-modal-title{
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #31626b;
+  display: none;
+  /* position: fixed; */
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  /* background-color: rgba(0, 0, 0, 0.4); */
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  display: flex;
+}
+
+.confirm-modal-title i {
+  margin-right: 10px;
+  color: #CA263A;
+  font-size: 24px;
+}
+#confirmationModalMessage {
+  font-size: 18px;
+  margin-bottom: 20px;
+  margin-left: 10px;
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+}
+
+.confirm-modal-content {
+  text-align:center;
+  background-color: #F8EEE5;
+  background-size: cover;
+  margin: 15% auto;
+  padding: 20px;
+  border: 1px solid #888;
+  width: 30%;
+  border-radius: 20px;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2);
+  position: relative;
+  max-width: 500px;
+}
+
+.tooltip{
+  position:relative;
+  display:inline-block;
+}
+/* Tooltip text */
+.tooltip .tooltiptext {
+  visibility: hidden;
+  width: 150px;
+  background-color: black;
+  color: #fff;
+  text-align: center;
+  border-radius: 6px;
+  padding: 10px 0;
+  position: absolute;
+  z-index: 1;
+  bottom: -50px; /* Position below the icon */
+  left: 150%;
+  margin-left: -65px; /* Half of the width to center the tooltip */
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.tooltiptext{
+  font-size:13px;
+  text-align:center;
+}
+
+/* Tooltip arrow */
+.tooltip .tooltiptext::after {
+  content: "";
+  position: absolute;
+  top: -5px; /* At the bottom of the tooltip */
+  left: 200%!important;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: black transparent transparent transparent;
+}
+
+/* Show the tooltip text when you mouse over the tooltip container */
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Modal styles */
+.modal {
+  display: none; 
+  z-index: 10; 
+  height: 100%;
+  position: fixed; 
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.modal-content {
+  font-size: 14px;
+  background-color: #F8EEE5;
+  margin: 5% auto;
+  padding: 20px;
+  border: 1px solid #888;
+  width: 50%;
+  border-radius: 20px;
+  position: relative;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2);
+  overflow-y: auto;
+  max-height: 100vh;
+  padding-top: 5px;
+}
+
+.modal-header {
+  /* display: flex; */
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #ddd;
+  /* padding-bottom: 10px;*/
+} 
+
+.modal-header .close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+}
+
+.modal-body {
+  /* padding: 15px; */
+  padding-bottom: 1.5rem;
+}
+
+.container {
+  max-width: 100%;
+}
+
+.orange {
+  background-color: #ffcc80;
+  padding: 20px;
+  border-radius: 10px;
+}
+.modal-logos{
+  max-height: 3rem;
+  width: auto;
+}
+.project-logo {
+  max-width: 20%;
+  height: auto;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.center-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.center-content {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  margin-top: 10px;
+}
+.modal-logos {
+  max-width: 50%;
+  height: auto;
+}
+.center-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 200px;
+  margin-top: 10px;
+  margin-bottom: -10px;
+}
+.transparent-box {
+  border: 2px solid rgba(0, 0, 0, 0.7);
+  padding: 5%;
+  margin: 5px 0;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 1);
+}
+.white-text {
+  color: white;
+  /* margin-top: -20px; */
+}
+.close:hover,
+.close:focus {
+  color: black;
+  text-decoration: none;
+  cursor: pointer;
+}
+.close {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  color: #444;
+  font-size: 16px;
+  /* font-weight: bold; */
+  cursor: pointer;
+  margin: 0;
+}
+
+.close-text{
+    background-color: #f44336;
+  /* position: absolute; */
+    top: 10px;
+    right: 15px;
+    color: white;
+    font-size: 16px;
+    /* font-weight: bold; */
+    cursor: pointer;
+    margin: 0;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    font-size: 16px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.close-text:hover {
+  background-color: #d32f2f;
+}
+
+.delete-button {
+  padding: 10px 20px;
+  background-color: #31626B!important;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+.delete-button:hover {
+  background-color: #ABC9CB!important;  
+}
+.close-button {
+  padding: 10px 20px;
+  background-color: red;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+
+.tooltip {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+  margin-left: 5px;
+  text-decoration: none;
+}
+
+.tooltip .tooltiptext {
+  visibility: hidden;
+  width: 450px;
+  background-color: #555;
+  color: #fff;
+  text-align: center;
+  border-radius: 5px;
+  padding: 5px 10px;
+  position: absolute;
+  z-index: 1;
+  bottom: 125%; /* Position above the icon */
+  left: 200%;
+  margin-left: -100px; /* Center the tooltip */
+  opacity: 0;
+  transition: opacity 0.3s;
+  text-decoration: none;
+}
+
+.tooltip i {
+  text-decoration: none; /* Remove underline from icon */
+}
+
+.tooltip .tooltiptext::after {
+  content: "";
+  border: none;
+  /* position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: #555 transparent transparent transparent; */
+}
+
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+  opacity: 1;
+}
+.styledtitle {
+  margin-bottom: 5px;
+  color: #333;
+  font-size: 14px;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  background-color: #31626B;
+  border-radius: 20px;
+  color: white;
+  padding: 5px 10px;
+  display: inline-block;
+  width: auto;
+  margin-top: 10px;
+}
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  margin-left: 5px;
+  height: 24px;
+  margin-left: 10px; /* Adjust spacing if needed */
+  vertical-align: middle; /* Align with text */
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-switch label {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 34px;
+}
+
+.toggle-switch label:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+.toggle-switch input:checked + label {
+  background-color: #31626B;
+}
+
+.toggle-switch input:checked + label:before {
+  transform: translateX(26px);
+}
+
+/* label {
+  
+} */
+.vlabel {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  width:24%;
+}
+.custom-tooltip {
+  margin-left: 4px; 
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  position:relative;
+}
+
+.fa-stack.fa-xs {
+  font-size: 0.65em;
+  /* line-height: 1; */
+}
+
+/* Icon background */
+.icon-background2 {
+  color: white;
+}
+
+/* Icon color */
+.fa-info {
+  color: #31626B;
+}
+
+/* Tooltip text */
+.custom-tooltip .custom-tooltiptext {
+  visibility: hidden;
+  width: auto;
+  background-color: #555;
+  color: #fff;
+  text-align: center;
+  padding: 5px 10px;
+  border-radius: 6px;
+  position: absolute;
+  z-index: 1;
+  bottom: 125%;
+  left: 50%;
+  opacity: 0;
+  transition: opacity 0.3s;
+  margin-left: 10px;
+  margin-right: 10px;
+  white-space: nowrap;
+}
+
+.custom-tooltip:hover .custom-tooltiptext {
+  visibility: visible;
+  opacity: 1;
+}
+.node-label {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  /* margin-right: 10px; */
+}
+
+
+/* Custom Modal Styles */
+.custom-modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.custom-modal-content {
+  background-color: #F8EEE5;
+  color: #333;
+  border-radius: 10px;
+  padding: 20px;
+  max-width: 500px;
+  margin: 10% auto;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+.custom-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  font-size: 1.2em;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 0; 
+}
+
+.custom-icon {
+  margin-right: 10px; /* Adjusts spacing between icon and text */
+}
+
+.custom-modal-title {
+  flex: 1;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  /* margin-bottom: 1rem;
+  margin-top: 1rem; */
+  color: black;
+}
+
+.custom-divider {
+  border: 0;
+  height: 2px;
+  background-color: rgb(0 0 0 / 5%);
+  margin: 10px 0;
+}
+
+.custom-modal p {
+  font-size: 16px;
+  color: #555;
+}
+
+.custom-modal-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.custom-modal-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1em;
+  margin: 0 10px;
+}
+.fa-exclamation-triangle{
+  margin-right: 10px;
+  color: #CA263A;
+  font-size: 25px;
+}
+
+.apply-button {
+  background-color: #31626B;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    font-size: 16px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.apply-button:hover {
+  background-color: #abc9cb;
+}
+
+.close-button {
+  background-color: #f44336;
+  /* position: absolute; */
+  top: 10px;
+  right: 15px;
+  color: white;
+  font-size: 16px;
+  /* font-weight: bold; */
+  cursor: pointer;
+  margin: 0;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  font-size: 16px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.close-button:hover {
+  background-color: #c0392b;
+}
+
+.custom-close-button {
+  color: #aaa;
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: bold;
+  margin-left: auto;
+}
+
+.custom-close-button:hover {
+  color: #333;
+}
+.form-group {
+  display: flex;
+  align-items: center;
+}
+
+.capacity-label {
+  display: flex;
+  align-items: center;
+  margin-right: 10px; /* Adjusts spacing between label and input */
+}
+
+.custom-tooltip {
+  margin-left: 5px; /* Adds space between "Capacity:" and the info icon */
+  cursor: pointer;
+  position: relative;
+}
+
+.capacity-input {
+  flex: 1; /* Makes the input field take available space */
+}
+
+.custom-tooltiptext {
+  visibility: hidden;
+  width: 200px;
+  background-color: black;
+  color: #fff;
+  text-align: center;
+  padding: 5px;
+  border-radius: 6px;
+
+  /* Position the tooltip */
+  position: absolute;
+  z-index: 1;
+  bottom: 125%;
+  left: 50%;
+  margin-left: -100px;
+}
+
+.custom-tooltip:hover .custom-tooltiptext {
+  visibility: visible;
+}
+
+.form-group label {
+  margin-bottom: 10px;
+  display: inline-block; /* Ensures that margin works on the label element */
+}
+
+.loading-spinner {
+  width: 12em;
+  height: 12em;
+  background-image: url('../../files/loading-spinner.svg');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  margin: 0 auto;
+}
+#clingoStopBtn {
+  background-color: #333;
+  color: #F8EEE5;
+  width: max-content;
+  margin:  0 auto;
+  padding: .8em 1.2em;
+  border-radius: 6%;
+}
+#clingoStopBtn:hover {
+  cursor: pointer;
+  background-color: black;
+}
+.spinner-centered {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+.clingo-text {
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 1rem;
+  margin-top: 1rem;
+  color: black;
+}
