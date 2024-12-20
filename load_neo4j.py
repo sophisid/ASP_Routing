@@ -7,14 +7,14 @@ Vehicles10_path = "VehicleList_2010.csv"
 df25 = pd.read_csv(Vehicles25_path)
 df10 = pd.read_csv(Vehicles10_path)
 
-print(df25.head())
+# print(df25.head())
 
 # Check column names and data types
-print("\nColumn names:")
-print(df25.columns)
+# print("\nColumn names:")
+# print(df25.columns)
 
-print("\nData types:")
-print(df25.dtypes)
+# print("\nData types:")
+# print(df25.dtypes)
 
 NEO4J_URI = "bolt://localhost:7687"
 
@@ -58,11 +58,11 @@ def load_to_neo4j(driver, dataframe, label_name):
 
 try:
     driver = GraphDatabase.driver(
-        NEO4J_URI, auth=("neo4j", "12345678")
+        NEO4J_URI, auth=("neo4j", "mypassword")
     )  # No authentication
     if is_db_empty(driver):
-        load_to_neo4j(driver, df25, label_name="cars25")
-        load_to_neo4j(driver, df10, label_name="cars10")
+        load_to_neo4j(driver, df25, label_name="cars")
+        load_to_neo4j(driver, df10, label_name="cars")
         print("Loaded Cars!")
     else:
         print("Dbms is not empty, skipping data loading!")
