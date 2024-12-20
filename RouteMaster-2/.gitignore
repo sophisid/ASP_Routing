@@ -7,3 +7,4 @@ package-lock.json
 
 # misc
 .env
+/src/configApis/config.js
