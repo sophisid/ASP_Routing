@@ -1,0 +1,51 @@
+Model,Displ,Cyl,Trans,Drive,Fuel,Cert_Region,Stnd,Stnd_Description,Underhood_ID,Veh_Class,Air_Pollution_Score,City_MPG,Hwy_MPG,Cmb_MPG,Greenhouse_Gas_Score,SmartWay,Price_EUR
+AUDI A3,2,4,Man-6,2WD,Gasoline,CA,S2,California LEV-II SULEV,AADXV02.03PA,station wagon,9.5,21,30,24,7,yes,23000
+AUDI A4,2,4,SemiAuto-6,4WD,Gasoline,CA,U2,California LEV-II ULEV,AADXV02.03UB,small car,7,21,27,23,6,yes,18400
+AUDI A5,2,4,SemiAuto-6,4WD,Gasoline,CA,U2,California LEV-II ULEV,AADXV02.03UB,small car,7,21,27,23,6,yes,18400
+AUDI A6,3.2,6,CVT,2WD,Gasoline,CA,U2,California LEV-II ULEV,AADXJ03.23UC,midsize car,7,18,28,22,6,yes,27600
+AUDI TT Coupe,2,4,SemiAuto-6,4WD,Gasoline,CA,U2,California LEV-II ULEV,AADXV02.03UA,small car,7,21,29,24,7,yes,18400
+AUDI TT Roadster,2,4,SemiAuto-6,4WD,Gasoline,FA,B5,Federal Tier 2 Bin 5,AADXV02.03UA,small car,6,21,29,24,7,yes,18400
+BMW 128Ci Convertible,3,6,Man-6,2WD,Gasoline,CA,S2,California LEV-II SULEV,ABMXV03.051R,small car,9,18,28,22,6,yes,18400
+BMW 128i,3,6,SemiAuto-6,2WD,Gasoline,CA,U2,California LEV-II ULEV,ABMXJ03.0E89,small car,7,18,28,22,6,yes,18400
+BMW 328Ci,3,6,SemiAuto-6,2WD,Gasoline,CA,U2,California LEV-II ULEV,ABMXJ03.0E89,small car,7,18,28,22,6,yes,18400
+BMW 328i,3,6,Man-6,2WD,Gasoline,CA,S2,California LEV-II SULEV,ABMXV03.051R,small car,9,18,28,22,6,yes,18400
+BMW 528i,3,6,Man-6,2WD,Gasoline,CA,U2,California LEV-II ULEV,ABMXJ03.0E89,midsize car,7,18,28,22,6,yes,27600
+BMW Z4,3,6,SemiAuto-6,2WD,Gasoline,CA,U2,California LEV-II ULEV,ABMXJ03.0E89,small car,7,18,28,22,6,yes,18400
+CADILLAC CTS,3,6,SemiAuto-6,2WD,Gasoline,FC,B4,Federal Tier 2 Bin 4,AGMXJ03.0157,midsize car,7,18,27,22,6,yes,27600
+CADILLAC CTS Wagon,3,6,SemiAuto-6,2WD,Gasoline,FC,B4,Federal Tier 2 Bin 4,AGMXJ03.0157,station wagon,7,18,27,22,6,yes,23000
+CHEVROLET Aveo,1.6,4,Auto-4,2WD,Gasoline,FC,B4,Federal Tier 2 Bin 4,AGDXV01.6004,small car,7,25,34,28,8,yes,18400
+CHEVROLET Aveo 5,1.6,4,Man-5,2WD,Gasoline,FC,B4,Federal Tier 2 Bin 4,AGDXV01.6004,small car,7,27,35,30,8,yes,18400
+CHEVROLET Camaro,3.6,6,SemiAuto-6,2WD,Gasoline,CA,U2,California LEV-II ULEV,AGMXJ03.6151,small car,7,18,29,22,6,yes,18400
+CHEVROLET Cobalt Coupe,2.2,4,Auto-4,2WD,Gasoline,CA,S2,California LEV-II SULEV,AGMXV02.2030,small car,9.5,24,33,27,7,yes,18400
+CHEVROLET Cobalt Sedan,2.2,4,Man-5,2WD,Gasoline,CA,L2,California LEV-II LEV,AGMXV02.4027,small car,6,25,35,29,8,yes,18400
+CHEVROLET Cobalt SS Coupe,2,4,Man-5,2WD,Gasoline,FA,B5,Federal Tier 2 Bin 5,AGMXV02.0021,small car,6,22,30,25,7,yes,18400
+CHEVROLET HHR,2.4,4,Auto-4,2WD,Ethanol/Gas,FC,B4,Federal Tier 2 Bin 4,AGMXV02.4033,SUV,7/7,15/22,21/30,17/25,7/7,yes,27600
+CHEVROLET HHR,2.4,4,Man-5,2WD,Ethanol/Gas,FC,B4,Federal Tier 2 Bin 4,AGMXV02.4033,SUV,7/7,16/22,22/30,19/25,7/7,yes,27600
+DODGE Caliber,2,4,Man-5,2WD,Gasoline,FA,B5,Federal Tier 2 Bin 5,ACRXJ02.04P0,station wagon,6,23,31,26,7,yes,23000
+DODGE Caliber,2,4,Man-5,2WD,Gasoline,CA,L2,California LEV-II LEV,ACRXJ02.04P0,station wagon,6,23,31,26,7,yes,23000
+DODGE Caliber,2.4,4,Man-5,2WD,Gasoline,FA,B5,Federal Tier 2 Bin 5,ACRXJ02.43P1,station wagon,6,23,29,25,7,yes,23000
+FORD Fusion,2.5,4,Auto-6,2WD,Gasoline,FA,B5,Federal Tier 2 Bin 5,AFMXV02.5VEF,midsize car,6,22,31,25,7,yes,27600
+HONDA Civic,1.8,4,Auto-5,2WD,CNG,FA,B2,Federal Tier 2 Bin 2,AHNXV01.8BDT,small car,9,24,36,28,9,yes,18400
+HYUNDAI Accent,1.6,4,Auto-4,2WD,Gasoline,FA,B5,Federal Tier 2 Bin 5,AHYXV01.6MW5,small car,6,27,36,30,8,yes,18400
+HYUNDAI Sonata,2.4,4,Auto-5,2WD,Gasoline,FA,B5,Federal Tier 2 Bin 5,AHYXV02.4SW5,large car,6,22,32,25,7,yes,27600
+JEEP Patriot,2.4,4,Man-5,2WD,Gasoline,CA,U2,California LEV-II ULEV,ACRXJ02.43P1,SUV,7,23,28,25,7,yes,27600
+KIA Rio,1.6,4,Man-5,2WD,Gasoline,CA,U2,California LEV-II ULEV,AKMXV01.6BW5,small car,7,28,34,31,8,yes,18400
+LEXUS RX 450h,3.5,6,Other-1,4WD,Gasoline,CA,S2,California LEV-II SULEV,ATYXT03.5CC4,SUV,9,30,28,29,8,yes,27600
+MAZDA 6,2.5,4,SemiAuto-5,2WD,Gasoline,FA,B5,Federal Tier 2 Bin 5,ATKXV02.55AA,midsize car,6,21,30,24,7,yes,27600
+MAZDA CX-7,2.5,4,SemiAuto-5,2WD,Gasoline,CA,U2,California LEV-II ULEV,ATKXT02.55BA,SUV,7,20,28,23,6,yes,27600
+MAZDA MX-5,2,4,SemiAuto-6,2WD,Gasoline,CA,U2,California LEV-II ULEV,ATKXV02.05BA,small car,7,21,28,23,6,yes,18400
+MINI Cooper,1.6,4,SemiAuto-6,2WD,Gasoline,CA,U2,California LEV-II ULEV,ABMXV01.6ULR,small car,7,25,33,28,8,yes,18400
+MITSUBISHI Eclipse,2.4,4,SemiAuto-4,2WD,Gasoline,CA,U2,California LEV-II ULEV,ADSXV02.4G4H,small car,7,20,27,23,6,yes,18400
+NISSAN Sentra,2,4,Man-6,2WD,Gasoline,CA,S2,California LEV-II SULEV,ANSXV02.082A,midsize car,9.5,24,31,27,7,yes,27600
+PORSCHE Cayman,2.9,6,Man-6,2WD,Gasoline,CA,U2,California LEV-II ULEV,APRXV02.9BMI,small car,7,19,27,22,6,yes,18400
+TOYOTA Corolla,1.8,4,Man-5,2WD,Gasoline,CA,U2,California LEV-II ULEV,ATYXV01.8BEA,small car,7,26,35,30,8,yes,18400
+TOYOTA Yaris,1.5,4,Man-5,2WD,Gasoline,CA,U2,California LEV-II ULEV,ATYXV01.5BEA,small car,7,29,36,32,9,yes,18400
+VOLKSWAGEN Golf,2,4,SemiAuto-6,2WD,Diesel,FA,Mod,Modified (Mod),AVWXV02.0U5N,small car,Mod,29,37,32,Mod,yes,18400
+VOLKSWAGEN GTI,2,4,Man-6,2WD,Gasoline,CA,S2,California LEV-II SULEV,AADXV02.03PA,small car,9.5,21,31,25,7,yes,18400
+VOLKSWAGEN Jetta,2,4,Man-6,2WD,Gasoline,CA,S2,California LEV-II SULEV,AADXV02.03PA,small car,9.5,21,31,25,7,yes,18400
+VOLKSWAGEN Jetta,2,4,SemiAuto-6,2WD,Diesel,FA,Mod,Modified (Mod),AVWXV02.0U5N,small car,Mod,29,37,32,Mod,yes,18400
+VOLKSWAGEN Jetta SportWagen,2.5,5,Man-5,2WD,Gasoline,CA,S2,California LEV-II SULEV,AVWXV02.5259,station wagon,9.5,22,30,25,7,yes,23000
+VOLKSWAGEN New Beetle,2.5,5,SemiAuto-6,2WD,Gasoline,FA,B3,Federal Tier 2 Bin 3,AVWXV02.5257,small car,8,20,29,23,6,yes,18400
+VOLKSWAGEN Passat,2,4,SemiAuto-6,2WD,Gasoline,FA,B5,Federal Tier 2 Bin 5,AVWXV02.03UA,midsize car,6,22,31,25,7,yes,27600
+VOLVO C30,2.5,5,SemiAuto-5,2WD,Gasoline,FA,B5,Federal Tier 2 Bin 5,AVVXV02.5U2T,small car,6,21,30,24,7,yes,18400
+VOLVO V50,2.4,5,SemiAuto-5,2WD,Gasoline,CA,U2,California LEV-II ULEV,AVVXV02.4U2N,station wagon,7,20,31,24,7,yes,23000
