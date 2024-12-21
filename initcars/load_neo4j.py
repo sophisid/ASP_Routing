@@ -17,6 +17,8 @@ df10 = pd.read_csv(Vehicles10_path)
 # print(df25.dtypes)
 
 NEO4J_URI = "bolt://localhost:7687"
+NEO4J_USER = "neo4j"
+NEO4J_PASSWORD = "mypassword"
 
 
 def is_db_empty(driver):
@@ -58,7 +60,7 @@ def load_to_neo4j(driver, dataframe, label_name):
 
 try:
     driver = GraphDatabase.driver(
-        NEO4J_URI, auth=("neo4j", "mypassword")
+        NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD)
     )  # No authentication
     if is_db_empty(driver):
         load_to_neo4j(driver, df25, label_name="cars")
