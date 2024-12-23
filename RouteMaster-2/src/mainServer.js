@@ -568,8 +568,6 @@ router.get('/retrieveASPrules', async (req, res) => {
 
 
 
-
-
 // run the python script that gets the results for each route from clingo
 // the python script calls the "retrieveASPrules" service (below) to get its input
 router.get('/runPythonScript', async (req, res) => {
