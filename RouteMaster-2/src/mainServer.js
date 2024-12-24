@@ -15,13 +15,77 @@ let childProcess;
 let processStoppedByUser = false; // Flag to track if the process was stopped intentionally
 
 const app = express();
-const port = process.env.PORT || 80;
+const port = process.env.PORT || 3000;
 
 // Function to create a Neo4j driver
 export const driver = neo4j.driver(
     config.neo4jUrl,
     neo4j.auth.basic(config.neo4jUsername, config.neo4jPassword)
 );
+
+/**
+ * Check if the Neo4j database is empty.
+ * @returns {Promise<boolean>} True if empty, false otherwise.
+ */
+async function isDatabaseEmpty() {
+    try {
+        const session = driver.session();
+        const query = "MATCH (n) RETURN count(n) AS node_count";
+        const result = await session.run(query);
+        const nodeCount = result.records[0].get('node_count');
+        await session.close();
+        return nodeCount === 0;
+    } catch (error) {
+        console.error('Error checking database:', error);
+        throw error;
+    }
+}
+
+/**
+ * Run the Python script to populate the Neo4j database.
+ * @returns {Promise<void>} Resolves when the script completes.
+ */
+function populateDatabase() {
+    return new Promise((resolve, reject) => {
+        const pythonScriptPath = path.join(__dirname, 'load_neo4j.py');
+        execFile('python', [pythonScriptPath], (err, stdout, stderr) => {
+            if (err) {
+                console.error('Error running Python script:', err);
+                reject(err);
+                return;
+            }
+            if (stderr) {
+                console.error('Python script stderr:', stderr);
+            }
+            console.log('Python script output:', stdout);
+            resolve();
+        });
+    });
+}
+
+/**
+ * Middleware to check if the database is empty and populate it if necessary.
+ */
+async function checkAndPopulateDatabase(req, res, next) {
+    try {
+        console.log('Checking if the database is empty...');
+        const isEmpty = await isDatabaseEmpty();
+        if (isEmpty) {
+            console.log('Database is empty. Populating...');
+            await populateDatabase();
+            console.log('Database populated successfully.');
+        } else {
+            console.log('Database is not empty. Skipping population.');
+        }
+        next();
+    } catch (error) {
+        console.error('Error during database check and population:', error);
+        res.status(500).send('Internal server error during database initialization.');
+    }
+}
+
+// Use the middleware for all routes
+app.use(checkAndPopulateDatabase);
 
 // Middleware setup
 const publicPath = path.join(__dirname, '..', 'public');
@@ -195,21 +259,23 @@ router.get('/loadNodes', async (req, res) => {
         //Write a Cypher query to fetch all nodes from the Neo4j database.
         const fetchNodesQuery = `
             MATCH (n:Node)
-            RETURN n.latitude AS latitude, 
-                   n.longitude AS longitude, 
-                   n.name AS name, 
-                   n.nodeColor AS nodeColor, 
-                   n.vehicleName AS vehicleName
+            RETURN n.Model AS Model, 
+                   n.Fuel AS Fuel, 
+                   n.Air_Pollution_Score AS Air_Pollution_Score, 
+                   n.Greenhouse_Gas_Score AS Greenhouse_Gas_Score, 
+                   n.Price_EUR AS Price_EUR
         `;
 
         session.run(fetchNodesQuery)
         .then(result => {
             const nodes = result.records.map(record => ({
-                latitude:       record.get("latitude"),
-                longitude:      record.get("longitude"),
-                name:           record.get("name"),
-                nodeColor:      record.get("nodeColor"),     
-                vehicleName:    (record.get("vehicleName") ? record.get("vehicleName") : ""),
+                Model:       record.get("Model"),
+                Fuel:      record.get("Fuel"),
+                Air_Pollution_Score:           record.get("Air_Pollution_Score"),
+                Cmb_MPG:      record.get("Cmb_MPG"),     
+                Greenhouse_Gas_Score: record.get("Greenhouse_Gas_Score"),
+                Price_EUR: record.get("Price_EUR"),
+
             }));
             console.log('--> #nodes:', nodes.length);
             res.json(nodes);
@@ -233,17 +299,23 @@ router.get('/loadVehicles', async (req, res) => {
         var session = driver.session({ database: config.neo4jDatabase });
 
         const fetchVehiclesQuery = `
-            MATCH (v:Vehicle)
-            RETURN 
-                v.vehicleID AS vehicleID, 
-                v.capacity AS capacity
+            MATCH (n:Node)
+            RETURN n.Model AS Model, 
+                   n.Fuel AS Fuel, 
+                   n.Air_Pollution_Score AS Air_Pollution_Score, 
+                   n.Greenhouse_Gas_Score AS Greenhouse_Gas_Score, 
+                   n.Price_EUR AS Price_EUR
         `;
 
         session.run(fetchVehiclesQuery)
         .then(result => {
             const vehicles = result.records.map(record => ({
-                vehicleID:  record.get("vehicleID"),
-                capacity:   record.get("capacity"),               
+                Model:       record.get("Model"),
+                Fuel:      record.get("Fuel"),
+                Air_Pollution_Score:           record.get("Air_Pollution_Score"),
+                Cmb_MPG:      record.get("Cmb_MPG"),     
+                Greenhouse_Gas_Score: record.get("Greenhouse_Gas_Score"),
+                Price_EUR: record.get("Price_EUR"),
             }));
             res.json(vehicles);
         }).catch(error => {
@@ -519,14 +591,14 @@ router.get('/retrieveASPrules', async (req, res) => {
 
             const result = await session.run(fetchVehiclesQuery);
             const vehicles = result.records.map(record => ({
-                vehicleID:  record.get("vehicleID"),
-                capacity:   record.get("capacity"),
+                Model:  record.get("Model"),
+                Air_Pollution_Score:   record.get("Air_Pollution_Score"),
             }));
             vehicles.map(vehicle => {                
                 // replace all the special characters, clingo has very simple enconding           
-                nodeVehicleDeclarations += ('vehicle(v'+vehicle.vehicleID+').');
-                vehiclesInfoString += ('capacity(v'+vehicle.vehicleID+', '+vehicle.capacity+').');
-                console.log("--> vehicle: v",vehicle.vehicleID,"\tcapacity: ",vehicle.capacity);               
+                nodeVehicleDeclarations += ('Model(v'+vehicle.Model+').');
+                vehiclesInfoString += ('Air_Pollution_Score(v'+vehicle.Model+', '+vehicle.Air_Pollution_Score+').');
+                console.log("--> vehicle: v",vehicle.Model,"\tAir_Pollution_Score: ",vehicle.Air_Pollution_Score);               
             })
         } catch (error) {
             console.error('Error loading vehicles:', error);
