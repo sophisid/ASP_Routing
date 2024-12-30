@@ -334,7 +334,7 @@ router.get('/loadVehicles', async (req, res) => {
     }
 });
 
-router.post('/getSixRoutes', async (req, res) => {
+router.post('/getOurRoutes', async (req, res) => {
     const { locations } = req.body; // Expecting `locations` from the frontend
 
     if (!locations || locations.length < 2) {
@@ -345,7 +345,7 @@ router.post('/getSixRoutes', async (req, res) => {
     const payload = {
         coordinates: locations,
         alternative_routes: {
-            target_count: 6, // Number of alternative routes
+            target_count: 10, // Number of alternative routes
             share_factor: 0.6, // Degree of similarity to the main route
             weight_factor: 1.2, // Allowing less optimal alternatives
         },
