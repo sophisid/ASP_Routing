@@ -6,6 +6,9 @@ import express from 'express';
 import path from 'path';
 import https from 'https';
 import fs from 'fs';
+import axios from 'axios';
+
+
 // Replaces non-ASCII characters with an ASCII approximation, or if none exists, a replacement character which defaults to "?".
 import { transliterate } from 'inflected';    // https://www.npmjs.com/package/inflected#inflectortransliterate
 
@@ -16,6 +19,7 @@ let processStoppedByUser = false; // Flag to track if the process was stopped in
 
 const app = express();
 const port = process.env.PORT || 3000;
+
 
 // Function to create a Neo4j driver
 export const driver = neo4j.driver(
@@ -258,7 +262,7 @@ router.get('/loadNodes', async (req, res) => {
 
         //Write a Cypher query to fetch all nodes from the Neo4j database.
         const fetchNodesQuery = `
-            MATCH (n:Node)
+            MATCH (n:cars)
             RETURN n.Model AS Model, 
                    n.Fuel AS Fuel, 
                    n.Air_Pollution_Score AS Air_Pollution_Score, 
@@ -299,7 +303,7 @@ router.get('/loadVehicles', async (req, res) => {
         var session = driver.session({ database: config.neo4jDatabase });
 
         const fetchVehiclesQuery = `
-            MATCH (n:Node)
+            MATCH (n:cars)
             RETURN n.Model AS Model, 
                    n.Fuel AS Fuel, 
                    n.Air_Pollution_Score AS Air_Pollution_Score, 
@@ -329,6 +333,137 @@ router.get('/loadVehicles', async (req, res) => {
         res.status(500).send('Failed to load vehicles.');
     }
 });
+
+router.post('/getSixRoutes', async (req, res) => {
+    const { locations } = req.body; // Expecting `locations` from the frontend
+
+    if (!locations || locations.length < 2) {
+        return res.status(400).send('At least two locations are required to calculate routes.');
+    }
+
+    // Construct the payload for ORS
+    const payload = {
+        coordinates: locations,
+        alternative_routes: {
+            target_count: 6, // Number of alternative routes
+            share_factor: 0.6, // Degree of similarity to the main route
+            weight_factor: 1.2, // Allowing less optimal alternatives
+        },
+        format: 'json', // Response format
+        instructions: true, // Include turn-by-turn instructions
+    };
+
+    try {
+        const orsResponse = await axios.post(
+            'https://api.openrouteservice.org/v2/directions/driving-car',
+            payload,
+            {
+                headers: {
+                    'Content-Type': 'application/json; charset=utf-8',
+                    Authorization: config.ORS_Key, // Your ORS API Key
+                },
+            }
+        );
+
+        const { routes } = orsResponse.data;
+
+        // Analyze routes for stops, tollway distance, and elevation changes
+        const analyzedRoutes = await Promise.all(
+            routes.map(async (route, index) => {
+                // Decode the geometry for elevation analysis
+                const decodedPolyline = decodePolyline(route.geometry);
+
+                // Fetch elevation data for the route
+                const elevationData = await getElevationData(route.geometry);
+
+                // Analyze route details
+                const totalStops = route.way_points.length - 2; // Excluding start and end
+                const tollwayDistance = calculateTollwayDistance(route.segments);
+                const elevationChanges = calculateElevationChanges(elevationData);
+
+                return {
+                    routeIndex: index,
+                    distance: route.summary.distance, // Distance in meters
+                    duration: route.summary.duration, // Duration in seconds
+                    tollwayDistance, // Total distance of tollways
+                    totalStops, // Number of stops along the route
+                    elevationChanges, // Elevation change information
+                    geometry: route.geometry, // Encoded polyline for mapping
+                    instructions: route.segments.flatMap(segment =>
+                        segment.steps.map(step => ({
+                            instruction: step.instruction,
+                            distance: step.distance, // Distance for this step
+                            duration: step.duration, // Duration for this step
+                        }))
+                    ),
+                };
+            })
+        );
+
+        res.json({ routes: analyzedRoutes });
+    } catch (error) {
+        console.error('Error fetching routes with alternatives from ORS:', error.response ? error.response.data : error.message);
+        res.status(500).send('Failed to fetch routes with alternatives from OpenRouteService.');
+    }
+});
+
+// Helper to decode polyline
+function decodePolyline(encoded) {
+    const polyline = require('@mapbox/polyline'); // Install @mapbox/polyline
+    return polyline.decode(encoded);
+}
+
+// Helper to fetch elevation data
+async function getElevationData(encodedGeometry) {
+    const elevationPayload = {
+        format_in: 'encodedpolyline',
+        geometry: encodedGeometry,
+    };
+    const elevationResponse = await axios.post(
+        'https://api.openrouteservice.org/elevation/line',
+        elevationPayload,
+        {
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: config.ORS_Key,
+            },
+        }
+    );
+    return elevationResponse.data.geometry;
+}
+
+// Helper to calculate tollway distance
+function calculateTollwayDistance(segments) {
+    let totalTollwayDistance = 0;
+    segments.forEach(segment => {
+        segment.steps.forEach(step => {
+            if (step.attributes && step.attributes.includes('tollway')) {
+                totalTollwayDistance += step.distance;
+            }
+        });
+    });
+    return totalTollwayDistance;
+}
+
+// Helper to calculate elevation changes
+function calculateElevationChanges(elevationData) {
+    let totalElevationGain = 0;
+    let totalElevationLoss = 0;
+
+    for (let i = 1; i < elevationData.length; i++) {
+        const diff = elevationData[i][2] - elevationData[i - 1][2];
+        if (diff > 0) {
+            totalElevationGain += diff;
+        } else {
+            totalElevationLoss -= diff;
+        }
+    }
+
+    return {
+        totalElevationGain,
+        totalElevationLoss,
+    };
+}
 
 // load relationships between nodes from the Neo4j db
 // to retrieve the routes
