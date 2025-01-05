@@ -335,8 +335,9 @@ router.get('/loadVehicles', async (req, res) => {
 });
 
 router.post('/getOurRoutes', async (req, res) => {
-    const { locations } = req.body; // Expecting `locations` from the frontend
+    const { locations, car } = req.body; // Expecting `locations` from the frontend
 
+    // TODO: connect with the ASP somehow. 
     if (!locations || locations.length < 2) {
         return res.status(400).send('At least two locations are required to calculate routes.');
     }
