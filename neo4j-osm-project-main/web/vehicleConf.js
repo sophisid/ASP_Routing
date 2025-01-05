@@ -1,3 +1,13 @@
+/************************************************************
+ * Multi-Field Filtering Code
+ * Demonstrates how to filter by Model, Transmission, Drive,
+ * Fuel, Emissions Standard, and Vehicle Class, for multiple
+ * vehicles. Each dropdown affects the others.
+ ************************************************************/
+
+/************************************
+ * 1. Imports / Globals
+ ************************************/
 import {
   getTextColor,
   showMessage,
@@ -20,14 +30,271 @@ import * as config from './configApis/config.js';
 let originalFieldValues = {}; // Object to store original field values
 let confNumVeh = 0;
 
+/************************************
+ * 2. fetchAllDropdownOptions()
+ *    - Returns the unfiltered sets
+ *      of all distinct values.
+ ************************************/
+export async function fetchAllDropdownOptions() {
+  const session = driver.session({ database: config.neo4jDatabase });
+  
+  try {
+    const queries = {
+      models:              "MATCH (c:cars) RETURN DISTINCT c.Model       AS value",
+      transmissions:       "MATCH (c:cars) RETURN DISTINCT c.Trans       AS value",
+      driveTypes:          "MATCH (c:cars) RETURN DISTINCT c.Drive       AS value",
+      fuelTypes:           "MATCH (c:cars) RETURN DISTINCT c.Fuel        AS value",
+      emissionsStandards:  "MATCH (c:cars) RETURN DISTINCT c.Stnd        AS value",
+      vehicleClasses:      "MATCH (c:cars) RETURN DISTINCT c.Veh_Class   AS value",
+    };
+
+    const dropdownOptions = {};
+
+    for (const [key, query] of Object.entries(queries)) {
+      const result = await session.run(query);
+      dropdownOptions[key] = result.records.map((record) => record.get("value"));
+    }
+
+    console.log("[DEBUG] fetchAllDropdownOptions ->", dropdownOptions);
+    return dropdownOptions;
+  } catch (error) {
+    console.error("[DEBUG] Error fetching all dropdown options:", error);
+    return {
+      models: [],
+      transmissions: [],
+      driveTypes: [],
+      fuelTypes: [],
+      emissionsStandards: [],
+      vehicleClasses: [],
+    };
+  } finally {
+    session.close();
+  }
+}
+
+/************************************
+ * 3. fetchFilteredOptions(filters)
+ *    - Multi-field filter: Build a
+ *      dynamic WHERE clause for any
+ *      non-empty fields.
+ ************************************/
+async function fetchFilteredOptions(filters) {
+  // filters is an object like:
+  // { model, trans, drive, fuel, stnd, veh_class }
+  console.log("[DEBUG] fetchFilteredOptions ->", filters);
+
+  const session = driver.session({ database: config.neo4jDatabase });
+  try {
+    // Build WHERE clauses
+    const whereClauses = [];
+    const params = {};
+
+    if (filters.model) {
+      whereClauses.push("c.Model = $model");
+      params.model = filters.model;
+    }
+    if (filters.trans) {
+      whereClauses.push("c.Trans = $trans");
+      params.trans = filters.trans;
+    }
+    if (filters.drive) {
+      whereClauses.push("c.Drive = $drive");
+      params.drive = filters.drive;
+    }
+    if (filters.fuel) {
+      whereClauses.push("c.Fuel = $fuel");
+      params.fuel = filters.fuel;
+    }
+    if (filters.stnd) {
+      whereClauses.push("c.Stnd = $stnd");
+      params.stnd = filters.stnd;
+    }
+    if (filters.veh_class) {
+      whereClauses.push("c.Veh_Class = $veh_class");
+      params.veh_class = filters.veh_class;
+    }
+
+    let whereString = "";
+    if (whereClauses.length > 0) {
+      whereString = "WHERE " + whereClauses.join(" AND ");
+    }
+
+    const query = `
+      MATCH (c:cars)
+      ${whereString}
+      RETURN
+        collect(distinct c.Model)         AS models,
+        collect(distinct c.Trans)         AS transmissions,
+        collect(distinct c.Drive)         AS driveTypes,
+        collect(distinct c.Fuel)          AS fuelTypes,
+        collect(distinct c.Stnd)          AS emissionsStandards,
+        collect(distinct c.Veh_Class)     AS vehicleClasses
+    `;
+
+    console.log("[DEBUG] fetchFilteredOptions -> Cypher query:\n", query);
+    console.log("[DEBUG] fetchFilteredOptions -> params:", params);
+
+    const result = await session.run(query, params);
+    console.log("[DEBUG] result.records:", result.records);
+
+    if (result.records.length > 0) {
+      const record = result.records[0];
+      return {
+        models: record.get("models"),
+        transmissions: record.get("transmissions"),
+        driveTypes: record.get("driveTypes"),
+        fuelTypes: record.get("fuelTypes"),
+        emissionsStandards: record.get("emissionsStandards"),
+        vehicleClasses: record.get("vehicleClasses"),
+      };
+    }
+    // If no records matched
+    return {
+      models: [],
+      transmissions: [],
+      driveTypes: [],
+      fuelTypes: [],
+      emissionsStandards: [],
+      vehicleClasses: [],
+    };
+  } catch (error) {
+    console.error("[DEBUG] fetchFilteredOptions -> Error:", error);
+    return {
+      models: [],
+      transmissions: [],
+      driveTypes: [],
+      fuelTypes: [],
+      emissionsStandards: [],
+      vehicleClasses: [],
+    };
+  } finally {
+    session.close();
+  }
+}
+
+/************************************
+ * 4. populateDropdown (with selected)
+ ************************************/
+function populateDropdown(selectElem, options, placeholder, selectedValue) {
+  if (!selectElem) return;
+
+  selectElem.innerHTML = "";
+
+  // placeholder
+  const placeholderOption = document.createElement("option");
+  placeholderOption.value = "";
+  placeholderOption.textContent = placeholder;
+  selectElem.appendChild(placeholderOption);
+
+  // add new options
+  options.forEach((opt) => {
+    const optionEl = document.createElement("option");
+    optionEl.value = opt;
+    optionEl.textContent = opt;
+    selectElem.appendChild(optionEl);
+  });
+
+  // if the previously selectedValue is still valid, reselect it
+  if (selectedValue && options.includes(selectedValue)) {
+    selectElem.value = selectedValue;
+  } else {
+    // reset to placeholder
+    selectElem.value = "";
+  }
+}
+
+/************************************
+ * 5. attachMultiFilterListeners(i)
+ *    - For each vehicle, attach an
+ *      event listener to *all* fields
+ ************************************/
+function attachMultiFilterListeners(i) {
+  // Grab references to the fields
+  const modelSelect    = document.getElementById(`model${i}`);
+  const transSelect    = document.getElementById(`trans${i}`);
+  const driveSelect    = document.getElementById(`drive${i}`);
+  const fuelSelect     = document.getElementById(`fuel${i}`);
+  const stndSelect     = document.getElementById(`stnd${i}`);
+  const vehClassSelect = document.getElementById(`veh_class${i}`);
+  const clearBtn       = document.getElementById(`clearFiltersBtn${i}`);
+
+  // Single callback for ANY field change
+  async function onFieldChange() {
+    console.log(`[DEBUG] onFieldChange -> vehicle ${i}`);
+
+    // Build the current filters object
+    const filters = {
+      model:      modelSelect.value || null,
+      trans:      transSelect.value || null,
+      drive:      driveSelect.value || null,
+      fuel:       fuelSelect.value || null,
+      stnd:       stndSelect.value || null,
+      veh_class:  vehClassSelect.value || null,
+    };
+
+    // Fetch new possible values
+    const filtered = await fetchFilteredOptions(filters);
+    console.log(`[DEBUG] fetchFilteredOptions -> vehicle ${i}:`, filtered);
+
+    // Re-populate all fields (retain current selection if still valid)
+    populateDropdown(modelSelect,    filtered.models,              "-- Select Model --",           filters.model);
+    populateDropdown(transSelect,    filtered.transmissions,       "-- Select Transmission --",    filters.trans);
+    populateDropdown(driveSelect,    filtered.driveTypes,          "-- Select Drive Type --",      filters.drive);
+    populateDropdown(fuelSelect,     filtered.fuelTypes,           "-- Select Fuel Type --",       filters.fuel);
+    populateDropdown(stndSelect,     filtered.emissionsStandards,  "-- Select Emissions Standard --", filters.stnd);
+    populateDropdown(vehClassSelect, filtered.vehicleClasses,      "-- Select Vehicle Class --",   filters.veh_class);
+  }
+
+  // Attach the same handler to all 6 dropdowns
+  modelSelect?.addEventListener("change", onFieldChange);
+  transSelect?.addEventListener("change", onFieldChange);
+  driveSelect?.addEventListener("change", onFieldChange);
+  fuelSelect?.addEventListener("change", onFieldChange);
+  stndSelect?.addEventListener("change", onFieldChange);
+  vehClassSelect?.addEventListener("change", onFieldChange);
+
+  // "Clear Filters" button
+  if (clearBtn) {
+    clearBtn.addEventListener("click", async () => {
+      console.log(`[DEBUG] Clear Filters clicked for vehicle ${i}`);
+
+      // Reset all fields to empty
+      modelSelect.value    = "";
+      transSelect.value    = "";
+      driveSelect.value    = "";
+      fuelSelect.value     = "";
+      stndSelect.value     = "";
+      vehClassSelect.value = "";
+
+      // Now fetch the unfiltered results
+      const allOptions = await fetchAllDropdownOptions();
+      console.log(`[DEBUG] Re-populating vehicle ${i} with unfiltered data (Clear Button)`, allOptions);
+
+      // Re-populate each field with all possible values
+      populateDropdown(modelSelect,    allOptions.models,             "-- Select Model --",            "");
+      populateDropdown(transSelect,    allOptions.transmissions,      "-- Select Transmission --",     "");
+      populateDropdown(driveSelect,    allOptions.driveTypes,         "-- Select Drive Type --",       "");
+      populateDropdown(fuelSelect,     allOptions.fuelTypes,          "-- Select Fuel Type --",        "");
+      populateDropdown(stndSelect,     allOptions.emissionsStandards, "-- Select Emissions Standard --", "");
+      populateDropdown(vehClassSelect, allOptions.vehicleClasses,     "-- Select Vehicle Class --",    "");
+    });
+  }
+}
+
+/************************************
+ * 6. generateVehicleConfigFields()
+ *    - Dynamically create the fields
+ *      for each vehicle, then attach
+ *      listeners.
+ ************************************/
 async function generateVehicleConfigFields(numVehicles) {
   const container = document.getElementById("vehicleConfigs");
   container.innerHTML = "";
 
-  // Fetch dynamic dropdown options
-  const dropdownOptions = await fetchDropdownOptions();
+  // Fetch all possible (unfiltered) options
+  const dropdownOptions = await fetchAllDropdownOptions();
 
-  // Define the extra fields
+  // Fields to generate
   const extraFields = [
     { label: "Model", name: "model", type: "dropdown", options: dropdownOptions.models },
     { label: "Transmission", name: "trans", type: "dropdown", options: dropdownOptions.transmissions },
@@ -56,12 +323,14 @@ async function generateVehicleConfigFields(numVehicles) {
       fieldDiv.className = "form-group";
 
       if (field.type === "dropdown") {
-        fieldDiv.innerHTML = `
+        const dropdownHTML = `
           <label for="${field.name}${i}">${field.label}:</label>
           <select id="${field.name}${i}" name="${field.name}${i}">
-            ${field.options.map(option => `<option value="${option}">${option}</option>`).join("")}
+            <option value="">-- Select ${field.label} --</option>
+            ${field.options.map((opt) => `<option value="${opt}">${opt}</option>`).join("")}
           </select>
         `;
+        fieldDiv.innerHTML = dropdownHTML;
       } else if (field.type === "checkbox") {
         fieldDiv.innerHTML = `
           <label for="${field.name}${i}">${field.label}:</label>
@@ -70,110 +339,87 @@ async function generateVehicleConfigFields(numVehicles) {
       } else if (field.type === "range") {
         fieldDiv.innerHTML = `
           <label for="${field.name}${i}">${field.label}:</label>
-          <input type="range" id="${field.name}${i}" name="${field.name}${i}" min="${field.min}" max="${field.max}" step="${field.step}">
+          <input type="range"
+                 id="${field.name}${i}"
+                 name="${field.name}${i}"
+                 min="${field.min}"
+                 max="${field.max}"
+                 step="${field.step}"
+                 value="">
         `;
       }
 
       extraFieldsContainer.appendChild(fieldDiv);
     });
 
+    // Clear button
+    const clearButtonDiv = document.createElement("div");
+    clearButtonDiv.className = "form-group";
+    clearButtonDiv.innerHTML = `
+      <button type="button" id="clearFiltersBtn${i}">Clear Filters (Vehicle ${i})</button>
+    `;
+    extraFieldsContainer.appendChild(clearButtonDiv);
+
     vehicleConfigDiv.appendChild(extraFieldsContainer);
     container.appendChild(vehicleConfigDiv);
   }
-}
 
-
-
-// Function to fetch dropdown options from Neo4j
-export async function fetchDropdownOptions() {
-  const session = driver.session({ database: config.neo4jDatabase });
-  
-  try {
-    // Cypher queries to fetch unique values for each dropdown
-    const queries = {
-      models: "MATCH (c:cars) RETURN DISTINCT c.Model AS value",
-      transmissions: "MATCH (c:cars) RETURN DISTINCT c.Trans AS value",
-      driveTypes: "MATCH (c:cars) RETURN DISTINCT c.Drive AS value",
-      fuelTypes: "MATCH (c:cars) RETURN DISTINCT c.Fuel AS value",
-      emissionsStandards: "MATCH (c:cars) RETURN DISTINCT c.Stnd AS value",
-      vehicleClasses: "MATCH (c:cars) RETURN DISTINCT c.Veh_Class AS value",
-    };
-
-    const dropdownOptions = {};
-
-    for (const [key, query] of Object.entries(queries)) {
-      // Run the query to get distinct values
-      const result = await session.run(query);
-      dropdownOptions[key] = result.records.map((record) => record.get("value"));
-    }
-
-    console.log("Fetched dropdown options:", dropdownOptions);
-    return dropdownOptions;
-  } catch (error) {
-    console.error("Error fetching dropdown options from Neo4j:", error);
-    return {
-      models: [],
-      transmissions: [],
-      driveTypes: [],
-      fuelTypes: [],
-      emissionsStandards: [],
-      vehicleClasses: [],
-    };
-  } finally {
-    session.close();
+  // Attach listeners for each vehicle
+  for (let i = 1; i <= numVehicles; i++) {
+    attachMultiFilterListeners(i);
   }
 }
 
-
-// Opening the vehicle configuration modal
+/************************************
+ * 7. Modal & Initialization
+ ************************************/
+// "Open Config" button => show modal & generate fields
 document.getElementById("openConfigButton").addEventListener("click", function () {
   const modal = document.getElementById("vehicleConfigModal");
   modal.style.display = "block";
-  // Initially, show the input fields for capacity and other vehicle data
   document.getElementById("vehicleConfigs").style.display = "block";
-  // Store the original field values
+
+  // Store original values if needed
   storeOriginalFieldValues();
-  // Retrieve the number of vehicles
+
   const numVehiclesInput = document.getElementById("numVehicles");
-  const numVehicles = parseInt(numVehiclesInput.value);
-  // Generate the input fields
+  const numVehicles = parseInt(numVehiclesInput.value) || 0;
+
   generateVehicleConfigFields(numVehicles);
 });
 
-// Close the Vehicle Configuration modal when clicking the "Close" button
+// "Close" modal button
 document.getElementById("closeVehicleConfigModal").onclick = closeVehicleConfigModal;
+function closeVehicleConfigModal() {
+  document.getElementById("vehicleConfigModal").style.display = "none";
+}
 
-// Function to store original field values
+// Optional function to store original field values
 function storeOriginalFieldValues() {
   originalFieldValues = {};
-  // Loop through the fields and store their values
   const numVehiclesInput = document.getElementById("numVehicles");
   const numVehicles = parseInt(numVehiclesInput.value);
 
   for (let i = 1; i <= numVehicles; i++) {
-    // In case you want to store them for revert/undo
-    // originalFieldValues[`capacity${i}`] = document.getElementById(`capacity${i}`).value;
+    // e.g.:
+    // originalFieldValues[`capacity${i}`] = ...
   }
 }
 
-window.addEventListener("load", function () {
-  resetNodes();
-  originalFieldValues = {};
-});
-
+/************************************
+ * 8. numVehicles input (0..3)
+ ************************************/
 const numVehiclesInput = document.getElementById("numVehicles");
-const maxVehicles = 3; // Set the maximum number of vehicles
+const maxVehicles = 3;
 
-// Ensure number of vehicles stays between 0 and 3
 numVehiclesInput.addEventListener("input", function () {
-  let numVehicles = parseInt(this.value);
-
+  let numVehicles = parseInt(this.value) || 0;
   if (numVehicles < 0) {
     numVehicles = 0;
-    this.value = numVehicles;
+    this.value = 0;
   } else if (numVehicles > maxVehicles) {
     numVehicles = maxVehicles;
-    this.value = numVehicles;
+    this.value = maxVehicles;
   }
 
   if (numVehicles > 0) {
@@ -184,164 +430,182 @@ numVehiclesInput.addEventListener("input", function () {
   }
 });
 
-let goRoute = 0;
-let vehicleConfigurations = [];
+/************************************
+ * 9. On page load
+ ************************************/
+window.addEventListener("load", function () {
+  resetNodes();
+  originalFieldValues = {};
+});
 
-// Create Vehicle in Neo4j
+/************************************
+ * 10. Create Vehicle in Neo4j
+ ************************************/
 export async function createVehicleInNeo4j(vehicleData) {
   const session = driver.session({ database: config.neo4jDatabase });
-
   try {
-    // Retrieve the current max vehicleID
+    // Find current max vehicleID
     const result = await session.run(
-      'MATCH (v:Vehicle) RETURN max(v.vehicleID) AS lastVehicleID'
+      "MATCH (v:Vehicle) RETURN max(v.vehicleID) AS lastVehicleID"
     );
-    let lastVehicleID = result.records[0].get('lastVehicleID');
+    let lastVehicleID = result.records[0].get("lastVehicleID");
     lastVehicleID = parseInt(lastVehicleID);
     if (isNaN(lastVehicleID)) lastVehicleID = 0;
 
     const newVehicleID = lastVehicleID + 1;
 
-    //%%% HY567 %%% Update the Cypher query below to include any fields you'd like to store:
-    // Example: MERGE (v:Vehicle { vehicleID: $vehicleID, capacity: $capacity, id: $id, model: $model, ...})
-    // Adjust property names in Neo4j as needed (just keep them consistent).
+    // Optional fields => handle null if empty
     const createVehicleQuery = `
       CREATE (v:Vehicle {
-          vehicleID: $vehicleID,
-          capacity:  $capacity,
-          id:        $id,
-          model:     $model,
-          displ:     $displ,
-          cylinders: $cylinders,
-          trans:     $trans,
-          drive:     $drive,
-          fuel:      $fuel,
-          Cert_region:       $Cert_region,
-          stnd:              $stnd,
-          stnd_description:  $stnd_description,
-          Underhood_id:      $Underhood_id,
-          veh_class:         $veh_class,
-          air_pollution_score: $air_pollution_score,
-          city_mpg:          $city_mpg,
-          hwy_mpg:           $hwy_mpg,
-          cmb_mpg:           $cmb_mpg,
-          greenhouse_gas_score: $greenhouse_gas_score,
-          smartway:          $smartway,
-          price:             $price
+        vehicleID: $vehicleID,
+        capacity:  $capacity,
+        id:        $id,
+        model:     $model,
+        displ:     $displ,
+        cylinders: $cylinders,
+        trans:     $trans,
+        drive:     $drive,
+        fuel:      $fuel,
+        Cert_region: $Cert_region,
+        stnd:      $stnd,
+        stnd_description: $stnd_description,
+        Underhood_id: $Underhood_id,
+        veh_class:  $veh_class,
+        air_pollution_score: $air_pollution_score,
+        city_mpg:   $city_mpg,
+        hwy_mpg:    $hwy_mpg,
+        cmb_mpg:    $cmb_mpg,
+        greenhouse_gas_score: $greenhouse_gas_score,
+        smartway:   $smartway,
+        price:      $price
       })
       RETURN v
     `;
 
-    // Build parameters from vehicleData
     const parameters = {
-      vehicleID:  newVehicleID,
-      capacity:   parseInt(vehicleData.capacity) || 1,
-      id:         vehicleData.id || "",
-      model:      vehicleData.model || "",
-      displ:      parseFloat(vehicleData.displ) || 0,
-      cylinders:  parseInt(vehicleData.cylinders) || 0,
-      trans:      vehicleData.trans || "",
-      drive:      vehicleData.drive || "",
-      fuel:       vehicleData.fuel || "",
-      Cert_region:       vehicleData.Cert_region || "",
-      stnd:              vehicleData.stnd || "",
-      stnd_description:  vehicleData.stnd_description || "",
-      Underhood_id:      vehicleData.Underhood_id || "",
-      veh_class:         vehicleData.veh_class || "",
-      air_pollution_score: parseFloat(vehicleData.air_pollution_score) || 0,
-      city_mpg:          parseFloat(vehicleData.city_mpg) || 0,
-      hwy_mpg:           parseFloat(vehicleData.hwy_mpg) || 0,
-      cmb_mpg:           parseFloat(vehicleData.cmb_mpg) || 0,
-      greenhouse_gas_score: parseFloat(vehicleData.greenhouse_gas_score) || 0,
-      smartway:          vehicleData.smartway || "",
-      price:             parseFloat(vehicleData.price) || 0
+      vehicleID: newVehicleID,
+      capacity: parseInt(vehicleData.capacity) || 1,
+      id: vehicleData.id || null,
+      model: vehicleData.model || null,
+      displ: vehicleData.displ ? parseFloat(vehicleData.displ) : null,
+      cylinders: vehicleData.cylinders ? parseInt(vehicleData.cylinders) : null,
+      trans: vehicleData.trans || null,
+      drive: vehicleData.drive || null,
+      fuel: vehicleData.fuel || null,
+      Cert_region: vehicleData.Cert_region || null,
+      stnd: vehicleData.stnd || null,
+      stnd_description: vehicleData.stnd_description || null,
+      Underhood_id: vehicleData.Underhood_id || null,
+      veh_class: vehicleData.veh_class || null,
+      air_pollution_score: vehicleData.air_pollution_score
+        ? parseFloat(vehicleData.air_pollution_score)
+        : null,
+      city_mpg: vehicleData.city_mpg
+        ? parseFloat(vehicleData.city_mpg)
+        : null,
+      hwy_mpg: vehicleData.hwy_mpg
+        ? parseFloat(vehicleData.hwy_mpg)
+        : null,
+      cmb_mpg: vehicleData.cmb_mpg
+        ? parseFloat(vehicleData.cmb_mpg)
+        : null,
+      greenhouse_gas_score: vehicleData.greenhouse_gas_score
+        ? parseFloat(vehicleData.greenhouse_gas_score)
+        : null,
+      smartway: vehicleData.smartway === "on" ? "on" : null,
+      price: vehicleData.price ? parseFloat(vehicleData.price) : null,
     };
 
-    const createResult = await session.writeTransaction(async tx => {
+    const createResult = await session.writeTransaction(async (tx) => {
       return tx.run(createVehicleQuery, parameters);
     });
 
-    console.log("Vehicle created in Neo4j with ID: ", newVehicleID);
-
+    console.log("[DEBUG] Vehicle created in Neo4j with ID:", newVehicleID);
   } catch (error) {
-    console.error("Error creating vehicle in Neo4j:", error);
+    console.error("[DEBUG] Error creating vehicle in Neo4j:", error);
     throw error;
   } finally {
     session.close();
   }
 }
 
+/************************************
+ * 11. clearAllVehiclesFromDB
+ ************************************/
 async function clearAllVehiclesFromDB() {
   const session = driver.session({ database: config.neo4jDatabase });
-
-  //%%% HY567 %%% Provide the correct Cypher query to delete all vehicles in your graph:
   const deleteAllVehiclesQuery = `
     MATCH (v:Vehicle)
     DETACH DELETE v
   `;
-
   try {
     const result = await session.run(deleteAllVehiclesQuery);
     showMessage("All vehicles deleted successfully", 2);
-    console.log("All vehicles deleted from Neo4j:", result.summary.counters);
+    console.log("[DEBUG] All vehicles deleted from Neo4j:", result.summary.counters);
   } catch (error) {
-    console.log("Error deleting vehicles from Neo4j:", error);
+    console.log("[DEBUG] Error deleting vehicles from Neo4j:", error);
   } finally {
     session.close();
   }
 }
 
-document.getElementById("vehicleConfigForm").addEventListener("submit", async function (e) {
-  e.preventDefault();
-  const numVehicles = parseInt(document.getElementById("numVehicles").value);
+/************************************
+ * 12. Form Submission
+ ************************************/
+document
+  .getElementById("vehicleConfigForm")
+  .addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const numVehicles = parseInt(document.getElementById("numVehicles").value) || 0;
 
-  // Clear previous entries before creating new ones
-  await clearAllVehiclesFromDB();
+    // Clear all old Vehicles in DB
+    await clearAllVehiclesFromDB();
 
-  // Loop through each vehicle and gather inputs
-  for (let i = 1; i <= numVehicles; i++) {
-    const vehicleData = {
-      capacity:         document.getElementById(`capacity${i}`).value,
-      id:               document.getElementById(`id${i}`).value,
-      model:            document.getElementById(`model${i}`).value,
-      displ:            document.getElementById(`displ${i}`).value,
-      cylinders:        document.getElementById(`cylinders${i}`).value,
-      trans:            document.getElementById(`trans${i}`).value,
-      drive:            document.getElementById(`drive${i}`).value,
-      fuel:             document.getElementById(`fuel${i}`).value,
-      Cert_region:      document.getElementById(`Cert_region${i}`).value,
-      stnd:             document.getElementById(`stnd${i}`).value,
-      stnd_description: document.getElementById(`stnd_description${i}`).value,
-      Underhood_id:     document.getElementById(`Underhood_id${i}`).value,
-      veh_class:        document.getElementById(`veh_class${i}`).value,
-      air_pollution_score: document.getElementById(`air_pollution_score${i}`).value,
-      city_mpg:         document.getElementById(`city_mpg${i}`).value,
-      hwy_mpg:          document.getElementById(`hwy_mpg${i}`).value,
-      cmb_mpg:          document.getElementById(`cmb_mpg${i}`).value,
-      greenhouse_gas_score: document.getElementById(`greenhouse_gas_score${i}`).value,
-      smartway:         document.getElementById(`smartway${i}`).value,
-      price:            document.getElementById(`price${i}`).value,
-    };
+    // Create new Vehicles
+    for (let i = 1; i <= numVehicles; i++) {
+      const vehicleData = {
+        capacity:          document.getElementById(`capacity${i}`)?.value ?? "",
+        id:                document.getElementById(`id${i}`)?.value ?? "",
+        model:             document.getElementById(`model${i}`)?.value ?? "",
+        displ:             document.getElementById(`displ${i}`)?.value ?? "",
+        cylinders:         document.getElementById(`cylinders${i}`)?.value ?? "",
+        trans:             document.getElementById(`trans${i}`)?.value ?? "",
+        drive:             document.getElementById(`drive${i}`)?.value ?? "",
+        fuel:              document.getElementById(`fuel${i}`)?.value ?? "",
+        Cert_region:       document.getElementById(`Cert_region${i}`)?.value ?? "",
+        stnd:              document.getElementById(`stnd${i}`)?.value ?? "",
+        stnd_description:  document.getElementById(`stnd_description${i}`)?.value ?? "",
+        Underhood_id:      document.getElementById(`Underhood_id${i}`)?.value ?? "",
+        veh_class:         document.getElementById(`veh_class${i}`)?.value ?? "",
+        air_pollution_score:    document.getElementById(`air_pollution_score${i}`)?.value ?? "",
+        city_mpg:          document.getElementById(`city_mpg${i}`)?.value ?? "",
+        hwy_mpg:           document.getElementById(`hwy_mpg${i}`)?.value ?? "",
+        cmb_mpg:           document.getElementById(`cmb_mpg${i}`)?.value ?? "",
+        greenhouse_gas_score:   document.getElementById(`greenhouse_gas_score${i}`)?.value ?? "",
+        // Checkbox => "on" if checked
+        smartway: document.getElementById(`smartway${i}`)?.checked ? "on" : "",
+        // Range => price
+        price: document.getElementById(`price${i}`)?.value ?? "",
+      };
 
-    try {
-      await createVehicleInNeo4j(vehicleData);
-    } catch (error) {
-      console.error("Error creating vehicle:", error);
-      // If there's an error, optionally break out or continue
-      return;
+      console.log(`[DEBUG] Creating vehicle ${i} ->`, vehicleData);
+
+      try {
+        await createVehicleInNeo4j(vehicleData);
+      } catch (error) {
+        console.error("[DEBUG] Error creating vehicle:", error);
+        // Decide whether to continue or break
+        return;
+      }
     }
-  }
 
-  showMessage("All vehicles created successfully!", 2);
-  closeVehicleConfigModal(); // Close the modal after successful submission
-});
+    showMessage("All vehicles created successfully!", 2);
+    closeVehicleConfigModal(); // Hide the modal
+  });
 
-// Event listener for the "Find Routes (Clingo Reasoner)" button
+/************************************
+ * 13. "Find Routes (Clingo Reasoner)"
+ ************************************/
 document.getElementById("findRoutesClingoButton").addEventListener("click", function () {
-  // call your Clingo solution method here
   callPythonforClingoExecution();
 });
-
-function closeVehicleConfigModal() {
-  document.getElementById("vehicleConfigModal").style.display = "none";
-}
