@@ -673,160 +673,251 @@ router.get('/getRoutesFromORS', async (req, res) => {
 // load nodes and vehicles from neo4j & convert their info into ASP rules 
 // using a matrix of each node's [longitude, latitude], find distances between all nodes & convert each distance into an ASP rule
 // return all the ASP rules in the form of a REALLY big string
-router.get('/retrieveASPrules', async (req, res) => {
-    let locations, stopNames, postData, storedNodes;
-    let durationsString = '', nodeVehicleDeclarations = '', nodesInfoString = '', vehiclesInfoString = '';
+// router.get('/retrieveASPrules', async (req, res) => {
+//     let locations, stopNames, postData, storedNodes;
+//     let durationsString = '', nodeVehicleDeclarations = '', nodesInfoString = '', vehiclesInfoString = '';
     
 
-    // load the nodes first and append to nodesString
-    async function loadNodes() {
-        try {
-            var session = driver.session({ database: config.neo4jDatabase });
+//     // load the nodes first and append to nodesString
+//     async function loadNodes() {
+//         try {
+//             var session = driver.session({ database: config.neo4jDatabase });
 
-            //Write a Cypher query to fetch all nodes with their latitude, longitude, and name from the Neo4j database.
-            const fetchNodesQuery = ``;
+//             //Write a Cypher query to fetch all nodes with their latitude, longitude, and name from the Neo4j database.
+//             const fetchNodesQuery = ``;
 
-            const result = await session.run(fetchNodesQuery);
-            const nodes = result.records.map(record => {
+//             const result = await session.run(fetchNodesQuery);
+//             const nodes = result.records.map(record => {
         
 
-                return {
-                    latitude:       record.get("latitude"),
-                    longitude:      record.get("longitude"),
-                    name:           transliterate(record.get("name")),   // replace all the special characters, clingo has very simple enconding                    
-                }
-            });
+//                 return {
+//                     latitude:       record.get("latitude"),
+//                     longitude:      record.get("longitude"),
+//                     name:           transliterate(record.get("name")),   // replace all the special characters, clingo has very simple enconding                    
+//                 }
+//             });
 
-            storedNodes = nodes.map(node => ({
-                ...node,
-            }));
+//             storedNodes = nodes.map(node => ({
+//                 ...node,
+//             }));
 
-            locations = storedNodes.map(node => [node.longitude, node.latitude]);
-            stopNames = storedNodes.map(node => node.name); // Extract node names
-            postData = JSON.stringify({ locations });
+//             locations = storedNodes.map(node => [node.longitude, node.latitude]);
+//             stopNames = storedNodes.map(node => node.name); // Extract node names
+//             postData = JSON.stringify({ locations });
 
-            // replace all the special characters, clingo has very simple enconding
-            storedNodes.map(node => {
-                let nodeName = (node.name).toLowerCase().replace(/\s/g, '');
-                nodeVehicleDeclarations += ('node('+nodeName+').');               
-            })            
-            await session.close();
-        } catch (error) {
-            console.error('Error loading nodes:', error);
-            res.status(500).send('Failed to load nodes.');
-        }
+//             // replace all the special characters, clingo has very simple enconding
+//             storedNodes.map(node => {
+//                 let nodeName = (node.name).toLowerCase().replace(/\s/g, '');
+//                 nodeVehicleDeclarations += ('node('+nodeName+').');               
+//             })            
+//             await session.close();
+//         } catch (error) {
+//             console.error('Error loading nodes:', error);
+//             res.status(500).send('Failed to load nodes.');
+//         }
+//     }
+//     await loadNodes();
+
+//     // load the vehicles next and append to vehiclesString
+//     async function loadVehicles() {
+//         try {
+//             var session = driver.session({ database: config.neo4jDatabase });
+
+//             const fetchVehiclesQuery = ``;
+
+//             const result = await session.run(fetchVehiclesQuery);
+//             const vehicles = result.records.map(record => ({
+//                 Model:  record.get("Model"),
+//                 Air_Pollution_Score:   record.get("Air_Pollution_Score"),
+//             }));
+//             vehicles.map(vehicle => {                
+//                 // replace all the special characters, clingo has very simple enconding           
+//                 nodeVehicleDeclarations += ('Model(v'+vehicle.Model+').');
+//                 vehiclesInfoString += ('Air_Pollution_Score(v'+vehicle.Model+', '+vehicle.Air_Pollution_Score+').');
+//                 console.log("--> vehicle: v",vehicle.Model,"\tAir_Pollution_Score: ",vehicle.Air_Pollution_Score);               
+//             })
+//         } catch (error) {
+//             console.error('Error loading vehicles:', error);
+//             res.status(500).send('Failed to load vehicles.');
+//         }
+//     }
+//     await loadVehicles();
+
+//     const request = https.request(options, (response) => {
+//         let data = '';
+
+//         // A chunk of data has been received.
+//         response.on('data', (chunk) => {
+//             data += chunk;
+//         });
+
+//         // The whole response has been received.
+//         response.on('end', () => {
+//             if (response.statusCode === 200) {
+//                 const jsondata   = JSON.parse(data);
+//                 const durations  = jsondata.durations;
+//                 const numOfNodes = JSON.parse(postData).locations.length;
+//                 console.log('---> Number of nodes: ',numOfNodes);
+
+//                 res.json({durations, rulesString: (nodeVehicleDeclarations+nodesInfoString+vehiclesInfoString+durationsString)});
+//             } else {
+//                 if (response.statusCode === 503) {
+//                     res.status(response.statusCode).send('Matrix service unavailable.');
+//                 } else 
+//                     res.status(response.statusCode).send('Failed to load matrix with distances between nodes, from OpenRouting Service.');
+//             }
+//         });
+//     });
+
+//     // Write the data to the request body
+//     request.write(postData);
+//     request.end();
+// });
+// GET /retrieveASPrules
+router.get('/retrieveASPrules', async (req, res) => {
+  try {
+    // 1. Load stops from DB
+    // Example: Each node => { name: "StopA", latitude: 12.34, longitude: 56.78, demand: 2 }
+    const nodes = await loadAllStopsFromNeo4j();   //TODO
+    // 2. Load vehicles from DB
+    // Example: Each vehicle => { vehicleName: "Vehicle1", capacity: 10 }
+    const vehicles = await loadAllVehiclesFromNeo4j(); //TODO
+
+    // 3. Build ASP facts
+    let aspFacts = "";
+
+    // (a) Create a `node(...)` fact for each stop
+    //     Possibly rename or transliterate to remove spaces
+    for (const node of nodes) {
+      const nodeName = node.name.toLowerCase().replace(/\s/g, '');
+      aspFacts += `node(${nodeName}).\n`;
+      // If you have demands:
+      if (node.demand) {
+        aspFacts += `demand(${nodeName}, ${node.demand}).\n`;
+      }
     }
-    await loadNodes();
 
-    // load the vehicles next and append to vehiclesString
-    async function loadVehicles() {
-        try {
-            var session = driver.session({ database: config.neo4jDatabase });
-
-            const fetchVehiclesQuery = ``;
-
-            const result = await session.run(fetchVehiclesQuery);
-            const vehicles = result.records.map(record => ({
-                Model:  record.get("Model"),
-                Air_Pollution_Score:   record.get("Air_Pollution_Score"),
-            }));
-            vehicles.map(vehicle => {                
-                // replace all the special characters, clingo has very simple enconding           
-                nodeVehicleDeclarations += ('Model(v'+vehicle.Model+').');
-                vehiclesInfoString += ('Air_Pollution_Score(v'+vehicle.Model+', '+vehicle.Air_Pollution_Score+').');
-                console.log("--> vehicle: v",vehicle.Model,"\tAir_Pollution_Score: ",vehicle.Air_Pollution_Score);               
-            })
-        } catch (error) {
-            console.error('Error loading vehicles:', error);
-            res.status(500).send('Failed to load vehicles.');
-        }
+    // (b) Create a `vehicle(...)` fact for each vehicle
+    for (const v of vehicles) {
+      const vehicleID = v.vehicleName.toLowerCase().replace(/\s/g, '');
+      aspFacts += `vehicle(${vehicleID}).\n`;
+      // If you have capacity:
+      aspFacts += `capacity(${vehicleID}, ${v.capacity}).\n`;
     }
-    await loadVehicles();
 
-    const request = https.request(options, (response) => {
-        let data = '';
+    // (c) Distances: compute or load from DB. Then create distance(A,B,C).
+    //    e.g. distance(stopa, stopb, 12).
+    const allDistances = computeAllDistances(nodes);
+    for (const dist of allDistances) {
+      const fromName = dist.from.toLowerCase().replace(/\s/g, '');
+      const toName   = dist.to.toLowerCase().replace(/\s/g, '');
+      aspFacts += `distance(${fromName}, ${toName}, ${dist.distance}).\n`;
+    }
 
-        // A chunk of data has been received.
-        response.on('data', (chunk) => {
-            data += chunk;
-        });
-
-        // The whole response has been received.
-        response.on('end', () => {
-            if (response.statusCode === 200) {
-                const jsondata   = JSON.parse(data);
-                const durations  = jsondata.durations;
-                const numOfNodes = JSON.parse(postData).locations.length;
-                console.log('---> Number of nodes: ',numOfNodes);
-
-                res.json({durations, rulesString: (nodeVehicleDeclarations+nodesInfoString+vehiclesInfoString+durationsString)});
-            } else {
-                if (response.statusCode === 503) {
-                    res.status(response.statusCode).send('Matrix service unavailable.');
-                } else 
-                    res.status(response.statusCode).send('Failed to load matrix with distances between nodes, from OpenRouting Service.');
-            }
-        });
-    });
-
-    // Write the data to the request body
-    request.write(postData);
-    request.end();
+    // 4. Return the ASP facts as plain text
+    return res.type('text/plain').send(aspFacts);
+  } catch (err) {
+    console.error("Error building ASP facts:", err);
+    res.status(500).send("Error building ASP facts");
+  }
 });
+
 
 
 
 // run the python script that gets the results for each route from clingo
 // the python script calls the "retrieveASPrules" service (below) to get its input
+// router.get('/runPythonScript', async (req, res) => {
+//     try {
+//         const scriptPath = path.join(__dirname, 'clingoFiles');
+//         const lpFilePath = path.join(scriptPath, 'nemoRouting4AdoXX.lp');
+
+//         console.log('Script Path:', scriptPath);
+
+//         // Check if the .lp file exists
+//         if (!fs.existsSync(lpFilePath)) {
+//             console.error(`Error: File ${lpFilePath} does not exist.`);
+//             return res.status(500).send(`Error: File ${lpFilePath} does not exist.`);
+//         }
+
+//         const pythonScriptPath = path.join(scriptPath, 'nemoClingoRouting.py');
+//         const pythonExecutable = 'python'; // or 'python3', depending on your setup
+
+//         console.log(`Executing script: ${pythonExecutable} ${pythonScriptPath} ${lpFilePath}`);
+
+//         childProcess = execFile(pythonExecutable, [pythonScriptPath, lpFilePath], { cwd: scriptPath, timeout: 70000 }, (err, stdout, stderr) => {
+//             if (err) {
+//                 if (processStoppedByUser) {
+//                     console.log('Process killed by user');
+//                     return res.send('Clingo retrieval process stopped');
+//                 }
+//                 else if (err.killed) {
+//                     console.error('Execution error: script timed out',res.statusCode);
+//                     return res.status(504).send('Clingo script execution timed out!');
+//                 }
+//                 console.error('Execution error:', err);
+//                 return res.status(500).send(err.message);
+//             }
+//             if (stderr) {
+//                 console.error('Python script stderr:', stderr);
+//             }
+//             console.log('Python script output:', stdout);
+//             const { matrix } = extractMatrixFromClingoAS(stdout);
+//             if (matrix) {
+//                 // sort and group the matrix by vehicle
+//                 const sortedMatrix = sortMatrix(matrix);
+//                 const groupedMatrix = groupMatrixByVehicle(sortedMatrix);
+//                 res.json({ groupedMatrix});
+//             }
+//             else
+//                 res.status(500).send('Matrix not found in the output.');
+//         });
+//     } catch (error) {
+//         console.error('Error in runPythonScript:', error);
+//         res.status(500).send('Error in runPythonScript');
+//     }
+// });
+// GET /runPythonScript
 router.get('/runPythonScript', async (req, res) => {
-    try {
-        const scriptPath = path.join(__dirname, 'clingoFiles');
-        const lpFilePath = path.join(scriptPath, 'nemoRouting4AdoXX.lp');
+  try {
+    // path to your python script & main .lp file
+    const scriptPath = path.join(__dirname, 'clingoFiles', 'nemoClingoRouting.py');
+    const lpFilePath = path.join(__dirname, 'clingoFiles', 'nemoRouting4AdoXX.lp');
 
-        console.log('Script Path:', scriptPath);
-
-        // Check if the .lp file exists
-        if (!fs.existsSync(lpFilePath)) {
-            console.error(`Error: File ${lpFilePath} does not exist.`);
-            return res.status(500).send(`Error: File ${lpFilePath} does not exist.`);
+    childProcess = execFile('python', [scriptPath, lpFilePath], { timeout: 70000 }, (err, stdout, stderr) => {
+      if (err) {
+        console.error('Clingo execution error:', err);
+        if (err.killed) {
+          return res.status(504).send('Clingo script timed out.');
         }
+        return res.status(500).send(err.message);
+      }
+      if (stderr) {
+        console.error('Stderr from python script:', stderr);
+      }
+      // stdout presumably has the route facts as a list
+      console.log('Python script output:', stdout);
 
-        const pythonScriptPath = path.join(scriptPath, 'nemoClingoRouting.py');
-        const pythonExecutable = 'python'; // or 'python3', depending on your setup
+      // If parseable as JSON or something:
+      // Example:  [("v1","stopa","stopb"),("v1","stopb","stopc"),("v2","stopd","stope")]
+      let routeData;
+      try {
+        routeData = JSON.parse(stdout);
+      } catch(parseError) {
+        // If it's not valid JSON, parse in another way
+        // or your python might print a Python list syntax
+        // you'll do something else:
+        console.error('Could not parse JSON from stdout. Falling back...');
+        routeData = []; 
+      }
 
-        console.log(`Executing script: ${pythonExecutable} ${pythonScriptPath} ${lpFilePath}`);
-
-        childProcess = execFile(pythonExecutable, [pythonScriptPath, lpFilePath], { cwd: scriptPath, timeout: 70000 }, (err, stdout, stderr) => {
-            if (err) {
-                if (processStoppedByUser) {
-                    console.log('Process killed by user');
-                    return res.send('Clingo retrieval process stopped');
-                }
-                else if (err.killed) {
-                    console.error('Execution error: script timed out',res.statusCode);
-                    return res.status(504).send('Clingo script execution timed out!');
-                }
-                console.error('Execution error:', err);
-                return res.status(500).send(err.message);
-            }
-            if (stderr) {
-                console.error('Python script stderr:', stderr);
-            }
-            console.log('Python script output:', stdout);
-            const { matrix } = extractMatrixFromClingoAS(stdout);
-            if (matrix) {
-                // sort and group the matrix by vehicle
-                const sortedMatrix = sortMatrix(matrix);
-                const groupedMatrix = groupMatrixByVehicle(sortedMatrix);
-                res.json({ groupedMatrix});
-            }
-            else
-                res.status(500).send('Matrix not found in the output.');
-        });
-    } catch (error) {
-        console.error('Error in runPythonScript:', error);
-        res.status(500).send('Error in runPythonScript');
-    }
+      // Return as JSON to your UI
+      res.json({ routeData });
+    });
+  } catch(error) {
+    console.error('Error in /runPythonScript:', error);
+    res.status(500).send('Error in runPythonScript');
+  }
 });
 
 // kill the /runPythonScript

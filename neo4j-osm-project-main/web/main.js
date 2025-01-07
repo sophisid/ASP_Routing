@@ -409,9 +409,7 @@ var clingoTimeoutWindow = document.getElementById("clingoTimeoutModal");
 
 export function callPythonforClingoExecution () {
 
-
-
-    showMessage("Do not execute Python Script from here. Run it as a standalone program!", 2);
+    // showMessage("Do not execute Python Script from here. Run it as a standalone program!", 2);
 
   
 
@@ -424,6 +422,9 @@ export function callPythonforClingoExecution () {
 
 
 export function clingoRoutingRetrieval (vehicleConfig) {
+  // //show loading spinner
+  // document.getElementById('loadingSpinner').style.display = 'block';
+
   const visitedNodes = []; // Declare an array to store visited nodes
   
   console.log(vehicleConfig);
@@ -451,6 +452,8 @@ export function clingoRoutingRetrieval (vehicleConfig) {
     })
     .then(data => {
       console.log("Found matrix with optimal routes: ",data);
+      // display none spiner
+      // document.getElementById('loadingSpinner').style.display = 'none';
       const earliestTimeInMinutes = data.earliestTimeInMinutes;
 
       for (const vehicle in data.groupedMatrix) {
@@ -641,6 +644,7 @@ document.getElementById('deleteAllNodesButton').addEventListener('click', () => 
 
 document.getElementById('findRoutesClingoButton').addEventListener('click', () => {
   findRoutesButtonGroup.style.display = 'none';
+  clingoRoutingRetrieval({});
 });
 
 //document.addEventListener('DOMContentLoaded', function() {

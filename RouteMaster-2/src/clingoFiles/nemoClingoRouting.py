@@ -1,34 +1,63 @@
+# file: nemoClingoRouting.py
+import requests
 import sys
 import subprocess
-import json
 
-def run_clingo(lp_file):
-    try:
-        result = subprocess.run(
-            ["clingo", lp_file, "--outf=2"],  # '--outf=2' ensures JSON output
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0:
-            clingo_output = json.loads(result.stdout)
-            # Process the JSON output
-            return clingo_output
-        else:
-            print("Clingo error:", result.stderr)
-            return None
-    except Exception as e:
-        print("Error running Clingo:", str(e))
-        return None
+def fetch_asp_facts():
+    """GET the facts from your Node service."""
+    url = 'http://localhost:3000/neo4j/retrieveASPrules'
+    resp = requests.get(url)
+    if resp.status_code != 200:
+        raise Exception(f"Failed to fetch ASP facts: {resp.text}")
+    return resp.text
+
+def run_clingo(main_lp_file):
+    # 1. Fetch ASP facts from Node
+    asp_facts = fetch_asp_facts()
+
+    # 2. Write them to a temp file
+    with open("tempFacts.lp", "w") as f:
+        f.write(asp_facts)
+
+    # 3. Run Clingo
+    cmd = [
+        "clingo",
+        main_lp_file,  # e.g., "nemoRouting4AdoXX.lp"
+        "tempFacts.lp",
+        "--opt-mode=optN",
+        "--quiet=1,2"
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    if result.returncode != 0:
+        raise Exception(f"Clingo error: {result.stderr}")
+
+    return result.stdout
+
+def parse_clingo_solution(output):
+    """
+    Parse lines like:
+      route(v1,stopa,stopb) route(v1,stopb,stopc) ...
+    We'll extract them into a matrix or JSON.
+    """
+    # We'll look for lines that start with "route("
+    lines = output.splitlines()
+    route_facts = []
+    for line in lines:
+        if 'route(' in line:
+            # e.g. 'route(v1,stopa,stopb) route(v1,stopb,stopc)'
+            entries = line.strip().split()
+            for e in entries:
+                if e.startswith("route("):
+                    e = e.strip('.')  # remove trailing dot
+                    e = e.replace('route(', '').replace(')', '')
+                    parts = e.split(',')
+                    if len(parts) == 3:
+                        vehicle, fromNode, toNode = parts
+                        route_facts.append((vehicle, fromNode, toNode))
+    return route_facts
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python nemoClingoRouting.py <path_to_lp_file>")
-        sys.exit(1)
-
-    lp_file = sys.argv[1]
-    result = run_clingo(lp_file)
-    if result:
-        # Extract and return the matrix or other relevant information
-        print(json.dumps(result))
-    else:
-        sys.exit(1)
+    main_lp = sys.argv[1] 
+    output = run_clingo(main_lp)
+    route_facts = parse_clingo_solution(output)
+    print(route_facts)  # or print JSON

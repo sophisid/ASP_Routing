@@ -603,9 +603,3 @@ document
     closeVehicleConfigModal(); // Hide the modal
   });
 
-/************************************
- * 13. "Find Routes (Clingo Reasoner)"
- ************************************/
-document.getElementById("findRoutesClingoButton").addEventListener("click", function () {
-  callPythonforClingoExecution();
-});
