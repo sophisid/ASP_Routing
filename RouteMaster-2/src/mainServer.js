@@ -6,8 +6,6 @@ import express from 'express';
 import path from 'path';
 import https from 'https';
 import fs from 'fs';
-import axios from 'axios';
-
 
 // Replaces non-ASCII characters with an ASCII approximation, or if none exists, a replacement character which defaults to "?".
 import { transliterate } from 'inflected';    // https://www.npmjs.com/package/inflected#inflectortransliterate
@@ -337,13 +335,12 @@ router.get('/loadVehicles', async (req, res) => {
 router.post('/getOurRoutes', async (req, res) => {
     const { locations, car } = req.body; // Expecting `locations` from the frontend
 
-    // TODO: connect with the ASP somehow. 
     if (!locations || locations.length < 2) {
         return res.status(400).send('At least two locations are required to calculate routes.');
     }
 
     // Construct the payload for ORS
-    const payload = {
+    const payload = JSON.stringify({
         coordinates: locations,
         alternative_routes: {
             target_count: 10, // Number of alternative routes
@@ -352,32 +349,58 @@ router.post('/getOurRoutes', async (req, res) => {
         },
         format: 'json', // Response format
         instructions: true, // Include turn-by-turn instructions
+    });
+
+    const options = {
+        hostname: 'api.openrouteservice.org',
+        path: '/v2/directions/driving-car',
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Content-Length': Buffer.byteLength(payload),
+            Authorization: config.ORS_Key, // Your ORS API Key
+        },
     };
 
     try {
-        const orsResponse = await axios.post(
-            'https://api.openrouteservice.org/v2/directions/driving-car',
-            payload,
-            {
-                headers: {
-                    'Content-Type': 'application/json; charset=utf-8',
-                    Authorization: config.ORS_Key, // Your ORS API Key
-                },
-            }
-        );
+        const orsResponse = await new Promise((resolve, reject) => {
+            const req = https.request(options, (res) => {
+                let responseData = '';
 
-        const { routes } = orsResponse.data;
+                res.on('data', (chunk) => {
+                    responseData += chunk;
+                });
+
+                res.on('end', () => {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        try {
+                            resolve(JSON.parse(responseData));
+                        } catch (err) {
+                            reject(new Error('Failed to parse ORS response'));
+                        }
+                    } else {
+                        reject(new Error(`ORS request failed with status ${res.statusCode}: ${responseData}`));
+                    }
+                });
+            });
+
+            req.on('error', (err) => {
+                reject(err);
+            });
+
+            req.write(payload);
+            req.end();
+        });
+
+        const { routes } = orsResponse;
 
         // Analyze routes for stops, tollway distance, and elevation changes
         const analyzedRoutes = await Promise.all(
             routes.map(async (route, index) => {
-                // Decode the geometry for elevation analysis
                 const decodedPolyline = decodePolyline(route.geometry);
 
-                // Fetch elevation data for the route
                 const elevationData = await getElevationData(route.geometry);
 
-                // Analyze route details
                 const totalStops = route.way_points.length - 2; // Excluding start and end
                 const tollwayDistance = calculateTollwayDistance(route.segments);
                 const elevationChanges = calculateElevationChanges(elevationData);
@@ -403,10 +426,11 @@ router.post('/getOurRoutes', async (req, res) => {
 
         res.json({ routes: analyzedRoutes });
     } catch (error) {
-        console.error('Error fetching routes with alternatives from ORS:', error.response ? error.response.data : error.message);
+        console.error('Error fetching routes with alternatives from ORS:', error.message);
         res.status(500).send('Failed to fetch routes with alternatives from OpenRouteService.');
     }
 });
+
 
 // Helper to decode polyline
 function decodePolyline(encoded) {
@@ -416,21 +440,51 @@ function decodePolyline(encoded) {
 
 // Helper to fetch elevation data
 async function getElevationData(encodedGeometry) {
-    const elevationPayload = {
+    const elevationPayload = JSON.stringify({
         format_in: 'encodedpolyline',
         geometry: encodedGeometry,
+    });
+
+    const options = {
+        hostname: 'api.openrouteservice.org',
+        path: '/elevation/line',
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(elevationPayload),
+            Authorization: config.ORS_Key, // Your ORS API Key
+        },
     };
-    const elevationResponse = await axios.post(
-        'https://api.openrouteservice.org/elevation/line',
-        elevationPayload,
-        {
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: config.ORS_Key,
-            },
-        }
-    );
-    return elevationResponse.data.geometry;
+
+    return new Promise((resolve, reject) => {
+        const req = https.request(options, (res) => {
+            let responseData = '';
+
+            res.on('data', (chunk) => {
+                responseData += chunk;
+            });
+
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    try {
+                        const data = JSON.parse(responseData);
+                        resolve(data.geometry);
+                    } catch (err) {
+                        reject(new Error('Failed to parse elevation data response'));
+                    }
+                } else {
+                    reject(new Error(`Elevation data request failed with status ${res.statusCode}: ${responseData}`));
+                }
+            });
+        });
+
+        req.on('error', (err) => {
+            reject(err);
+        });
+
+        req.write(elevationPayload);
+        req.end();
+    });
 }
 
 // Helper to calculate tollway distance
