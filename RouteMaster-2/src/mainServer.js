@@ -6,8 +6,6 @@ import express from 'express';
 import path from 'path';
 import https from 'https';
 import fs from 'fs';
-import axios from 'axios';
-
 
 // Replaces non-ASCII characters with an ASCII approximation, or if none exists, a replacement character which defaults to "?".
 import { transliterate } from 'inflected';    // https://www.npmjs.com/package/inflected#inflectortransliterate
@@ -342,7 +340,7 @@ router.post('/getOurRoutes', async (req, res) => {
     }
 
     // Construct the payload for ORS
-    const payload = {
+    const payload = JSON.stringify({
         coordinates: locations,
         alternative_routes: {
             target_count: 10, // Number of alternative routes
@@ -351,7 +349,7 @@ router.post('/getOurRoutes', async (req, res) => {
         },
         format: 'json', // Response format
         instructions: true, // Include turn-by-turn instructions
-    };
+    });
 
     const options = {
         hostname: 'api.openrouteservice.org',
@@ -830,17 +828,98 @@ router.get('/getRoutesFromORS', async (req, res) => {
 //     request.end();
 // });
 // GET /retrieveASPrules
+ 
+// Function to load all stops from Neo4j
+async function loadStopsFromNeo4j() {
+    try {
+        const session = driver.session({ database: config.neo4jDatabase });
+
+        const fetchStopsQuery = `
+            MATCH (n:Node)
+            RETURN n.name AS name, 
+                   n.latitude AS latitude, 
+                   n.longitude AS longitude, 
+                   n.demand AS demand
+        `;
+
+        const result = await session.run(fetchStopsQuery);
+
+        const stops = result.records.map(record => ({
+            name: record.get("name"),
+            latitude: record.get("latitude"),
+            longitude: record.get("longitude"),
+            demand: record.get("demand") || 0 // Default demand to 0 if not present
+        }));
+
+        await session.close();
+
+        return stops;
+    } catch (error) {
+        console.error("Error loading stops from Neo4j:", error);
+        throw new Error("Failed to load stops from Neo4j.");
+    }
+}
+
+// Function to load all vehicles from Neo4j
+async function loadVehiclesFromNeo4j() {
+    try {
+        const session = driver.session({ database: config.neo4jDatabase });
+
+        const fetchVehiclesQuery = `
+            MATCH (v:Vehicle)
+            RETURN v.vehicleName AS vehicleName, 
+                   v.capacity AS capacity
+        `;
+
+        const result = await session.run(fetchVehiclesQuery);
+
+        const vehicles = result.records.map(record => ({
+            vehicleName: record.get("vehicleName"),
+            capacity: record.get("capacity")
+        }));
+
+        await session.close();
+
+        return vehicles;
+    } catch (error) {
+        console.error("Error loading vehicles from Neo4j:", error);
+        throw new Error("Failed to load vehicles from Neo4j.");
+    }
+}
 router.get('/retrieveASPrules', async (req, res) => {
   try {
     // 1. Load stops from DB
     // Example: Each node => { name: "StopA", latitude: 12.34, longitude: 56.78, demand: 2 }
-    const nodes = await loadAllStopsFromNeo4j();   //TODO
+    const nodes = await loadStopsFromNeo4j();   //TODO
     // 2. Load vehicles from DB
     // Example: Each vehicle => { vehicleName: "Vehicle1", capacity: 10 }
-    const vehicles = await loadAllVehiclesFromNeo4j(); //TODO
+    const vehicles = await loadVehiclesFromNeo4j(); //TODO
 
     // 3. Build ASP facts
     let aspFacts = "";
+    nodes.forEach(node => {
+        const nodeName = node.name.toLowerCase().replace(/\s/g, '');
+        aspFacts += `node(${nodeName}).\n`;
+        aspFacts += `latitude(${nodeName}, ${node.latitude}).\n`;
+        aspFacts += `longitude(${nodeName}, ${node.longitude}).\n`;
+        if (node.demand) {
+            aspFacts += `demand(${nodeName}, ${node.demand}).\n`;
+        }
+
+        });
+    vehicles.forEach(v => {
+        const vehicleID = v.vehicleName.toLowerCase().replace(/\s/g, '');
+        asspFacts += `vehicle(${vehicleID}).\n`;
+        aspFacts += `fuel(${vehicleID}, ${v.fuel}).\n`;
+        aspFacts += `airPollutionScore(${vehicleID}, ${v.airPollutionScore}).\n`;
+        aspFacts += `greenhouseGasScore(${vehicleID}, ${v.greenhouseGasScore}).\n`;
+        aspFacts += `cmbMPG(${vehicleID}, ${v.cmbMPG}).\n`;
+        aspFacts += `priceEUR(${vehicleID}, ${v.priceEUR}).\n`;
+        // if(v.demand){
+        //     aspFacts += `demand(${vehicleID}).\n`;
+        // }
+    });
+
 
     // (a) Create a `node(...)` fact for each stop
     //     Possibly rename or transliterate to remove spaces
