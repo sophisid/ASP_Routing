@@ -6,6 +6,8 @@ import express from 'express';
 import path from 'path';
 import https from 'https';
 import fs from 'fs';
+import axios from 'axios';
+
 
 // Replaces non-ASCII characters with an ASCII approximation, or if none exists, a replacement character which defaults to "?".
 import { transliterate } from 'inflected';    // https://www.npmjs.com/package/inflected#inflectortransliterate
@@ -340,7 +342,7 @@ router.post('/getOurRoutes', async (req, res) => {
     }
 
     // Construct the payload for ORS
-    const payload = JSON.stringify({
+    const payload = {
         coordinates: locations,
         alternative_routes: {
             target_count: 10, // Number of alternative routes
@@ -349,7 +351,7 @@ router.post('/getOurRoutes', async (req, res) => {
         },
         format: 'json', // Response format
         instructions: true, // Include turn-by-turn instructions
-    });
+    };
 
     const options = {
         hostname: 'api.openrouteservice.org',
