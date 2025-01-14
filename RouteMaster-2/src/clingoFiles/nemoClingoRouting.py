@@ -2,6 +2,7 @@
 import requests
 import sys
 import subprocess
+import json
 
 def fetch_asp_facts():
     """GET the facts from your Node service."""
@@ -54,7 +55,7 @@ def parse_clingo_solution(output):
                     if len(parts) == 3:
                         vehicle, fromNode, toNode = parts
                         route_facts.append((vehicle, fromNode, toNode))
-    return route_facts
+    return json.dumps(route_facts)
 
 if __name__ == "__main__":
     main_lp = sys.argv[1] 
