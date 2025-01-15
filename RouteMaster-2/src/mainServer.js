@@ -201,7 +201,7 @@ const simplifyRouteData = (data) => {
     if (!vehiclesStartEnd[vehicleName]) {
       return vehicles; // skip if no start/end data for this vehicle
     }
-    console.log('vehicles[vehicleName][0].name:\t', vehicles[vehicleName][0]?.name);
+    console.log('vehicles[vehicleName][0].name:\t', vehicles[vehicleName][0].name);
 
     // Add the routeStart at the beginning if not first stop as well
     if (

@@ -59,14 +59,12 @@ servedBy(X, V) :- route(V, Y, X).
 servedByNode(X, V) :- route(V, X, Y).  % X is served by V if V goes from X->Y
 servedByNode(X, V) :- route(V, Y, X).  % or Y->X
 
-#sum { DEMAND, N : demand(N, DEMAND), servedByNode(N, V) } <= CAP :- capacity(V, CAP).
-
 %----------------------------------------------------------------------
 % 5. Cost Minimization: sum of distances
 %----------------------------------------------------------------------
 cost(V,A,B,D) :- route(V,A,B), distance(A,B,D).
 
-#minimize { D,@1 : cost(_,_,_,D) }.
+#minimize { D : cost(_,_,_,D) }.
 
 %----------------------------------------------------------------------
 % 6. Show final routes
