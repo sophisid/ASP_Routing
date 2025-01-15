@@ -127,7 +127,7 @@ export function loadNodesFromNeo4j() {
   //%%% HY567 %%% Create a cypher query to retrieve node info and modify the code that follows accordingly.
 
   const fetchNodesQuery = `
-
+    MATCH (n:Node) RETURN n LIMIT 5
   `;
 
   session
@@ -199,37 +199,37 @@ export function loadNodesFromNeo4j() {
 }
 
 export function loadVehiclesFromNeo4j() {
-  // Fetch nodes from Neo4j
-  var session = driver.session({ database: config.neo4jDatabase });
+  return new Promise((resolve, reject) => {
+    const session = driver.session({ database: config.neo4jDatabase });
 
+    const fetchVehiclesQuery = `
+      MATCH (n:Vehicle)
+      RETURN n
+      LIMIT 25
+    `;
 
-  //%%% HY567 %%% Create a cypher query to retrieve vehicle info and modify the code that follows accordingly.
+    session
+      .run(fetchVehiclesQuery)
+      .then(result => {
+        const vehicles = result.records.map(record => {
+          const node = record.get("n");
+          const { vehicleID, capacity, model, price } = node.properties;
+          return { vehicleID, capacity, model, price };
+        });
 
-  const fetchVehiclesQuery = `
-   
-  `;
-  
-  session.run(fetchVehiclesQuery).then(result => {
-    // Process result and save vehicles
-    result.records.forEach(record => {
-      const vehicleID = record.get("vehicleID");
-      const capacity  = record.get("capacity");
-
-      const vehicles = result.records.map(record => ({
-        vehicleID:    record.get("vehicleID"),
-        capacity:     record.get("capacity"),
-      }));
-      
-      // console.log('Loaded vehicles from DB:',vehicles);
-
-      availableVehicles = vehicles;
-    })
-  }).catch(error => {
-    console.error("Error fetching vehicles from Neo4j:", error);
-  }).finally(() => {
-    session.close();
-  })
+        console.log("Loaded vehicles from DB:", vehicles);
+        resolve(vehicles); // Resolve the Promise with the vehicles
+      })
+      .catch(error => {
+        console.error("Error fetching vehicles from Neo4j:", error);
+        reject(error); // Reject the Promise on error
+      })
+      .finally(() => {
+        session.close();
+      });
+  });
 }
+
 
 
 export function updateMarkersOnMap() {
@@ -426,7 +426,7 @@ export function clingoRoutingRetrieval (vehicleConfig) {
   // document.getElementById('loadingSpinner').style.display = 'block';
 
   const visitedNodes = []; // Declare an array to store visited nodes
-  
+  console.log("lalala");
   console.log(vehicleConfig);
 
   const busStops = nodesMarkerConf.nodeMarkers.map((marker, index) => ({
@@ -438,7 +438,7 @@ export function clingoRoutingRetrieval (vehicleConfig) {
 
   clingoTimeoutWindow.style.display = "block";
 
-  fetch('http://localhost/neo4j/runPythonScript')
+  fetch('http://localhost:8000/neo4j/runPythonScript')
     .then(response => {
       if(!response.ok) {
         if (response.status === 404) throw new Error('404, Not Found');
@@ -642,9 +642,18 @@ document.getElementById('deleteAllNodesButton').addEventListener('click', () => 
 });
 
 
-document.getElementById('findRoutesClingoButton').addEventListener('click', () => {
+document.getElementById('findRoutesClingoButton').addEventListener('click', async () => {
   findRoutesButtonGroup.style.display = 'none';
-  clingoRoutingRetrieval({});
+  // await for this to return  results  before proceeding (loadVehiclesFromNeo4j()
+  try {
+    // Wait for vehicles to load
+    const vehicles = await loadVehiclesFromNeo4j();
+
+    // Pass vehicles to clingoRoutingRetrieval
+    clingoRoutingRetrieval(vehicles);
+  } catch (error) {
+    console.error("Error loading vehicles:", error);
+  }
 });
 
 //document.addEventListener('DOMContentLoaded', function() {

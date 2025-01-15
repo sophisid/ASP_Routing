@@ -18,6 +18,19 @@ let processStoppedByUser = false; // Flag to track if the process was stopped in
 const app = express();
 const port = process.env.PORT || 3000;
 
+app.use(cors({
+  origin: 'http://localhost:3000', // Replace with the correct frontend URL
+  methods: ['GET', 'POST'],       // Allow only certain methods
+  allowedHeaders: ['Content-Type', 'Authorization'], // Restrict allowed headers
+}));
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/neo4j',router);
+
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
+});
 // Function to create a Neo4j driver
 export const driver = neo4j.driver(
   config.neo4jUrl,

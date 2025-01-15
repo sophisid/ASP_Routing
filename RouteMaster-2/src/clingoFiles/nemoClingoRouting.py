@@ -6,7 +6,7 @@ import json
 
 def fetch_asp_facts():
     """GET the facts from your Node service."""
-    url = 'http://localhost:3000/neo4j/retrieveASPrules'
+    url = 'http://localhost:8000/neo4j/retrieveASPrules'
     resp = requests.get(url)
     if resp.status_code != 200:
         raise Exception(f"Failed to fetch ASP facts: {resp.text}")
