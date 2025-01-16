@@ -1,21 +1,24 @@
-// with the esm module, we can now have import and require in the same file!
-// import { driver } from './mainClient';
-import * as config from './configApis/config';
+import * as config from './configApis/config.js';
 import neo4j from 'neo4j-driver';
 import express from 'express';
+import cors from 'cors';
 import path from 'path';
 import https from 'https';
 import fs from 'fs';
+import { execFile } from 'child_process';
+import { transliterate } from 'inflected';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
-// Replaces non-ASCII characters with an ASCII approximation, or if none exists, a replacement character which defaults to "?". 
-import { transliterate } from 'inflected';    // https://www.npmjs.com/package/inflected#inflectortransliterate
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-const cors = require('cors');
-const { execFile } = require('child_process');
 let childProcess;
 let processStoppedByUser = false; // Flag to track if the process was stopped intentionally
 
 const app = express();
+// const router = express.Router();
+
 const port = process.env.PORT || 3000;
 
 app.use(cors({
@@ -26,7 +29,7 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/neo4j',router);
+// app.use('/neo4j',router);
 
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
