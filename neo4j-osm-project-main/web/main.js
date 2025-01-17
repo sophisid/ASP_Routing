@@ -438,7 +438,7 @@ export function clingoRoutingRetrieval (vehicleConfig) {
 
   clingoTimeoutWindow.style.display = "block";
 
-  fetch('http://localhost/neo4j/runPythonScript')
+  fetch('http://localhost:3000/neo4j/runPythonScript')
     .then(response => {
       if(!response.ok) {
         if (response.status === 404) throw new Error('404, Not Found');
@@ -502,7 +502,7 @@ export function clingoRoutingRetrieval (vehicleConfig) {
 }
 
 document.getElementById("clingoStopBtn").addEventListener("click", function () {
-  fetch('http://localhost/neo4j/stopPythonScript')
+  fetch('http://localhost:3000/neo4j/stopPythonScript')
     .then(response => {
       console.log('Response:', response);  // Log the response object
       console.log('Content-Type:', response.headers.get('Content-Type')); // Check Content-Type

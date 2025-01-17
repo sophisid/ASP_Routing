@@ -21,6 +21,10 @@ In command line, go to folder neo4j*\web and run the following command:
 
 python -m http.server
 
+Also, go to RouteMaster-2/src and run the following command: 
+
+node mainServer.mjs 
+
 Once the server is up&running, open your web browser (better not Safari) and enter the following URL in the address bar:
 http://localhost:8000/frontend/homePage.html
 
