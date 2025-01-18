@@ -2,7 +2,7 @@
 // Function to send the collected parameters to the backend
 function sendClingoConfig() {
     
-    fetch('http://localhost/neo4j/runPythonScript', {
+    fetch('http://localhost:3000/neo4j/runPythonScript', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

@@ -29,7 +29,7 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-// app.use('/neo4j',router);
+app.use('/neo4j',router);
 
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
@@ -65,7 +65,7 @@ async function isDatabaseEmpty() {
 function populateDatabase() {
   return new Promise((resolve, reject) => {
     const pythonScriptPath = path.join(__dirname, 'load_neo4j.py');
-    execFile('python', [pythonScriptPath], (err, stdout, stderr) => {
+    execFile('python3', [pythonScriptPath], (err, stdout, stderr) => {
       if (err) {
         console.error('Error running Python script:', err);
         reject(err);
@@ -932,9 +932,9 @@ router.get('/runPythonScript', async (req, res) => {
     const scriptPath = path.join(__dirname, 'clingoFiles', 'nemoClingoRouting.py');
     const lpFilePath = path.join(__dirname, 'clingoFiles', 'nemoRouting4AdoXX.lp');
 
-    childProcess = execFile('python', [scriptPath, lpFilePath], { timeout: 70000 }, (err, stdout, stderr) => {
+    childProcess = execFile('python3', [scriptPath, lpFilePath], { timeout: 70000 }, (err, stdout, stderr) => {
       if (err) {
-        console.error('Clingo execution error:', err);
+        console.error('Clingo execution error222:', err);
         if (err.killed) {
           return res.status(504).send('Clingo script timed out.');
         }

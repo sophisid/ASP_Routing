@@ -417,6 +417,51 @@ export function callPythonforClingoExecution () {
 }
 
 
+export function createRelationshipsBetweenNodes(nodes) {
+  // Check if nodes array is empty
+  if (!nodes || nodes.length < 2) {
+    console.error("At least two nodes are required to create relationships.");
+    return;
+  }
+
+  // Start a Neo4j session
+  const session = driver.session({ database: config.neo4jDatabase });
+
+  // Process the nodes to create relationships
+  const promises = [];
+
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const currentNode = nodes[i];
+    const nextNode = nodes[i + 1];
+
+    const relationshipQuery = `
+      MATCH (a:Node {name: $currentNodeName}), (b:Node {name: $nextNodeName})
+      MERGE (a)-[r:CONNECTED_TO {vehicleName: $vehicleName}]->(b)
+      RETURN r
+    `;
+
+    const params = {
+      currentNodeName: currentNode.node.name,
+      nextNodeName: nextNode.node.name,
+      vehicleName: currentNode.vehicleName, // Use vehicle name from the array
+    };
+
+    // Push the query to the promises array
+    promises.push(session.run(relationshipQuery, params));
+  }
+
+  // Execute all queries and handle completion
+  Promise.all(promises)
+    .then(results => {
+      console.log("Relationships created successfully:", results.length);
+    })
+    .catch(error => {
+      console.error("Error creating relationships in Neo4j:", error);
+    })
+    .finally(() => {
+      session.close();
+    });
+}
 
 
 
@@ -438,7 +483,7 @@ export function clingoRoutingRetrieval (vehicleConfig) {
 
   clingoTimeoutWindow.style.display = "block";
 
-  fetch('http://localhost:8000/neo4j/runPythonScript')
+  fetch('http://localhost:3000/neo4j/runPythonScript')
     .then(response => {
       if(!response.ok) {
         if (response.status === 404) throw new Error('404, Not Found');
@@ -502,7 +547,7 @@ export function clingoRoutingRetrieval (vehicleConfig) {
 }
 
 document.getElementById("clingoStopBtn").addEventListener("click", function () {
-  fetch('http://localhost/neo4j/stopPythonScript')
+  fetch('http://localhost:3000/neo4j/stopPythonScript')
     .then(response => {
       console.log('Response:', response);  // Log the response object
       console.log('Content-Type:', response.headers.get('Content-Type')); // Check Content-Type
