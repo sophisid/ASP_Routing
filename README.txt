@@ -25,7 +25,7 @@ folders neo4j*/web/configAPIs and RouteMaster*/src/configApis/
 
 In command line, go to folder neo4j*\web and run the following command:
 
-python -m http.server
+python3 -m http.server
 
 Also, go to RouteMaster-2/src and run the following commands: 
 npm i
