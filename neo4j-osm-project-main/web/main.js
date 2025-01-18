@@ -75,7 +75,7 @@ export const sharedData = {
 
 
 // const map = L.map("map", { zoomControl: false }).setView([35.338735, 25.144213], 13);
-const map = L.map("map", { zoomControl: false }).setView([48.208538, 16.373590], 14);
+const map = L.map("map", { zoomControl: false }).setView([35.208538, 25.373590], 20);
 
 L.control
   .zoom({
@@ -574,61 +574,46 @@ document.getElementById("clingoStopBtn").addEventListener("click", function () {
 
 export function resetNodes() {
   const session = driver.session({ database: config.neo4jDatabase });
-  for(let i=0; i<=currentRoute.length; i++){
-    if (currentRoute[i] && arrow[i]) {
-    map.removeLayer(currentRoute[i]);
-    map.removeLayer(arrow[i]);
-    }
-  }
-  // Define a query to delete all relationships from nodes
+
+  const deleteAllNodesQuery = `
+    MATCH (n:Node)
+    DETACH DELETE n
+  `;
+
   const deleteAllRelationshipsQuery = `
     MATCH ()-[r]->()
     DELETE r
   `;
-  // Define a query to update node colors to red
+
   const updateNodeColorQuery = `
     MATCH (n:Node)
-      SET n.nodeColor = 'red'
-      REMOVE n.vehicleName
+    SET n.nodeColor = 'red'
+    REMOVE n.vehicleName
   `;
+
   session
-    .run(deleteAllRelationshipsQuery)
-    .then(result => {
-      // console.log('Deleted all relationships from nodes');
-      // Close the session after deleting relationships
-      session.close()
-        .then(() => {
-          // console.log('Session closed');
-          // Create a new session for the next transaction
-          const newSession = driver.session({ database: config.neo4jDatabase });
-          // Run the second transaction to update node colors
-          newSession
-          .run(updateNodeColorQuery)
-            .then(result => {
-              // console.log('Updated node colors to red');
-              //loadNodesFromNeo4j();
-              // also load any available vehicles in db
-              loadVehiclesFromNeo4j();
-              // Close the new session
-              newSession.close()
-              .then(() => {
-                  // console.log('New session closed');
-                })
-                .catch(error => {
-                  console.error('Error closing new session:', error);
-                });
-            })
-            .catch(error => {
-              console.error('Error updating node colors:', error);
-            });
-        })
-        .catch(error => {
-          console.error('Error closing session:', error);
-        });
+    .run(deleteAllNodesQuery)
+    .then(() => {
+      console.log("All nodes labeled 'Node' deleted successfully.");
+      return session.run(deleteAllRelationshipsQuery);
+    })
+    .then(() => {
+      console.log("All remaining relationships deleted successfully.");
+      return session.run(updateNodeColorQuery);
+    })
+    .then(() => {
+      console.log("Node colors updated to red and vehicleName removed.");
+      return loadVehiclesFromNeo4j(); 
+    })
+    .then(() => {
+      console.log("Vehicles reloaded successfully.");
     })
     .catch(error => {
-      customAlert("Error setting up Neo4j driver .Please check your configurations. ");
-      console.error('Error deleting relationships:', error);
+      console.error("Error during resetNodes:", error);
+      customAlert("Error setting up Neo4j driver. Please check your configurations.");
+    })
+    .finally(() => {
+      session.close();
     });
 }
 

@@ -211,7 +211,7 @@ function populateDropdown(selectElem, options, placeholder, selectedValue) {
 function attachMultiFilterListeners(i) {
   // Grab references to the fields
   const modelSelect    = document.getElementById(`model${i}`);
-  const transSelect    = document.getElementById(`trans${i}`);
+  const transSelect    = document.getElementById(`transmission${i}`);
   const driveSelect    = document.getElementById(`drive${i}`);
   const fuelSelect     = document.getElementById(`fuel${i}`);
   const stndSelect     = document.getElementById(`stnd${i}`);
@@ -225,7 +225,7 @@ function attachMultiFilterListeners(i) {
     // Build the current filters object
     const filters = {
       model:      modelSelect.value || null,
-      trans:      transSelect.value || null,
+      transmission:      transSelect.value || null,
       drive:      driveSelect.value || null,
       fuel:       fuelSelect.value || null,
       stnd:       stndSelect.value || null,
@@ -238,7 +238,7 @@ function attachMultiFilterListeners(i) {
 
     // Re-populate all fields (retain current selection if still valid)
     populateDropdown(modelSelect,    filtered.models,              "-- Select Model --",           filters.model);
-    populateDropdown(transSelect,    filtered.transmissions,       "-- Select Transmission --",    filters.trans);
+    populateDropdown(transSelect,    filtered.transmissions,       "-- Select Transmission --",    filters.transmission);
     populateDropdown(driveSelect,    filtered.driveTypes,          "-- Select Drive Type --",      filters.drive);
     populateDropdown(fuelSelect,     filtered.fuelTypes,           "-- Select Fuel Type --",       filters.fuel);
     populateDropdown(stndSelect,     filtered.emissionsStandards,  "-- Select Emissions Standard --", filters.stnd);
@@ -461,15 +461,15 @@ export async function createVehicleInNeo4j(vehicleData) {
         capacity:  $capacity,
         id:        $id,
         model:     $model,
-        displ:     $displ,
-        cylinders: $cylinders,
-        trans:     $trans,
+        display:   $display,
+        cyl:       $cyl,
+        transmission: $transmission,
         drive:     $drive,
         fuel:      $fuel,
-        Cert_region: $Cert_region,
+        cert_region: $Cert_region,
         stnd:      $stnd,
         stnd_description: $stnd_description,
-        Underhood_id: $Underhood_id,
+        underhood_id: $underhood_id,
         veh_class:  $veh_class,
         air_pollution_score: $air_pollution_score,
         city_mpg:   $city_mpg,
@@ -477,7 +477,7 @@ export async function createVehicleInNeo4j(vehicleData) {
         cmb_mpg:    $cmb_mpg,
         greenhouse_gas_score: $greenhouse_gas_score,
         smartway:   $smartway,
-        price:      $price
+        price_eur:  $price_eur
       })
       RETURN v
     `;
@@ -487,15 +487,15 @@ export async function createVehicleInNeo4j(vehicleData) {
       capacity: parseInt(vehicleData.capacity) || 1,
       id: vehicleData.id || null,
       model: vehicleData.model || null,
-      displ: vehicleData.displ ? parseFloat(vehicleData.displ) : null,
-      cylinders: vehicleData.cylinders ? parseInt(vehicleData.cylinders) : null,
-      trans: vehicleData.trans || null,
+      display: vehicleData.display ? parseFloat(vehicleData.display) : null,
+      cyl: vehicleData.cyl ? parseInt(vehicleData.cyl) : null,
+      transmission: vehicleData.transmission || null,
       drive: vehicleData.drive || null,
       fuel: vehicleData.fuel || null,
-      Cert_region: vehicleData.Cert_region || null,
+      cert_region: vehicleData.cert_region || null,
       stnd: vehicleData.stnd || null,
       stnd_description: vehicleData.stnd_description || null,
-      Underhood_id: vehicleData.Underhood_id || null,
+      underhood_id: vehicleData.underhood_id || null,
       veh_class: vehicleData.veh_class || null,
       air_pollution_score: vehicleData.air_pollution_score
         ? parseFloat(vehicleData.air_pollution_score)
@@ -513,7 +513,7 @@ export async function createVehicleInNeo4j(vehicleData) {
         ? parseFloat(vehicleData.greenhouse_gas_score)
         : null,
       smartway: vehicleData.smartway === "on" ? "on" : null,
-      price: vehicleData.price ? parseFloat(vehicleData.price) : null,
+      price_eur: vehicleData.price_eur ? parseFloat(vehicleData.price_eur) : null,
     };
 
     const createResult = await session.writeTransaction(async (tx) => {
@@ -567,15 +567,15 @@ document
         capacity:          document.getElementById(`capacity${i}`)?.value ?? "",
         id:                document.getElementById(`id${i}`)?.value ?? "",
         model:             document.getElementById(`model${i}`)?.value ?? "",
-        displ:             document.getElementById(`displ${i}`)?.value ?? "",
-        cylinders:         document.getElementById(`cylinders${i}`)?.value ?? "",
-        trans:             document.getElementById(`trans${i}`)?.value ?? "",
+        display:           document.getElementById(`display${i}`)?.value ?? "",
+        cyl:               document.getElementById(`cyl${i}`)?.value ?? "",
+        transmission:      document.getElementById(`transmission${i}`)?.value ?? "",
         drive:             document.getElementById(`drive${i}`)?.value ?? "",
         fuel:              document.getElementById(`fuel${i}`)?.value ?? "",
-        Cert_region:       document.getElementById(`Cert_region${i}`)?.value ?? "",
+        cert_region:       document.getElementById(`cert_region${i}`)?.value ?? "",
         stnd:              document.getElementById(`stnd${i}`)?.value ?? "",
         stnd_description:  document.getElementById(`stnd_description${i}`)?.value ?? "",
-        Underhood_id:      document.getElementById(`Underhood_id${i}`)?.value ?? "",
+        underhood_id:      document.getElementById(`underhood_id${i}`)?.value ?? "",
         veh_class:         document.getElementById(`veh_class${i}`)?.value ?? "",
         air_pollution_score:    document.getElementById(`air_pollution_score${i}`)?.value ?? "",
         city_mpg:          document.getElementById(`city_mpg${i}`)?.value ?? "",
@@ -585,7 +585,7 @@ document
         // Checkbox => "on" if checked
         smartway: document.getElementById(`smartway${i}`)?.checked ? "on" : "",
         // Range => price
-        price: document.getElementById(`price${i}`)?.value ?? "",
+        price_eur: document.getElementById(`price_eur${i}`)?.value ?? "",
       };
 
       console.log(`[DEBUG] Creating vehicle ${i} ->`, vehicleData);

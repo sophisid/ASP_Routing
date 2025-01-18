@@ -90,3 +90,25 @@ Run your python script that generates routes as a separate
 clingo will not be able to terminate and it is better to kill it manually.
 
 
+%%%%%%%%%%%%%%%%%%
+#To add#
+prepei na mpei : 
+1)road type -> mpg's, 
+2)elevation, 
+3)number of stops, 
+4)rules for least pollution score, 
+5)prefer the electric car if not already selected,
+6)as low pricing as possible, 
+7)if not transmission selected add auto,
+
+
+#Rules#
+
+Node : node(X) :- latitude(X, _), longitude(X, _).
+Vehicle : vehicle(X) :- capacity(X, _), transmission(X, _), fuel(X, _), air_pollution_score(X, _), display(X, _), cyl(X, _), drive(X, _), stnd(X, _), stnd_description(X, _), cert_region(X, _), transmission(X, _), underhood_id(X, _), veh_class(X, _), city_mpg(X, _), hwy_mpg(X, _), cmb_mpg(X, _), greenhouse_gas_score(X, _), smartway(X, _), price_eur(X, _). 
+Distance : distance(X, Y, Z) :- latitude(X, Lat1), longitude(X, Long1), latitude(Y, Lat2), longitude(Y, Long2), Z = sqrt((Lat1 - Lat2)^2 + (Long1 - Long2)^2).
+Route : route(X, Y, Z) :- distance(X, Y, Z), vehicle(X), vehicle(Y), X != Y.
+Friendly environment : friendly_environment(X) :- vehicle(X), air_pollution_score(X, Score), Score <= 7.
+
+
+%%%%%%%%%%%%%%%%%%
