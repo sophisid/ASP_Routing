@@ -40,12 +40,12 @@ export async function fetchAllDropdownOptions() {
   
   try {
     const queries = {
-      models:              "MATCH (c:cars) RETURN DISTINCT c.Model       AS value",
-      transmissions:       "MATCH (c:cars) RETURN DISTINCT c.Trans       AS value",
-      driveTypes:          "MATCH (c:cars) RETURN DISTINCT c.Drive       AS value",
-      fuelTypes:           "MATCH (c:cars) RETURN DISTINCT c.Fuel        AS value",
-      emissionsStandards:  "MATCH (c:cars) RETURN DISTINCT c.Stnd        AS value",
-      vehicleClasses:      "MATCH (c:cars) RETURN DISTINCT c.Veh_Class   AS value",
+      models:              "MATCH (c:cars) RETURN DISTINCT c.model       AS value",
+      transmissions:       "MATCH (c:cars) RETURN DISTINCT c.transmission       AS value",
+      driveTypes:          "MATCH (c:cars) RETURN DISTINCT c.drive       AS value",
+      fuelTypes:           "MATCH (c:cars) RETURN DISTINCT c.fuel        AS value",
+      emissionsStandards:  "MATCH (c:cars) RETURN DISTINCT c.stnd        AS value",
+      vehicleClasses:      "MATCH (c:cars) RETURN DISTINCT c.veh_class   AS value",
     };
 
     const dropdownOptions = {};
@@ -90,27 +90,27 @@ async function fetchFilteredOptions(filters) {
     const params = {};
 
     if (filters.model) {
-      whereClauses.push("c.Model = $model");
+      whereClauses.push("c.model = $model");
       params.model = filters.model;
     }
     if (filters.trans) {
-      whereClauses.push("c.Trans = $trans");
+      whereClauses.push("c.transmission = $trans");
       params.trans = filters.trans;
     }
     if (filters.drive) {
-      whereClauses.push("c.Drive = $drive");
+      whereClauses.push("c.drive = $drive");
       params.drive = filters.drive;
     }
     if (filters.fuel) {
-      whereClauses.push("c.Fuel = $fuel");
+      whereClauses.push("c.fuel = $fuel");
       params.fuel = filters.fuel;
     }
     if (filters.stnd) {
-      whereClauses.push("c.Stnd = $stnd");
+      whereClauses.push("c.stnd = $stnd");
       params.stnd = filters.stnd;
     }
     if (filters.veh_class) {
-      whereClauses.push("c.Veh_Class = $veh_class");
+      whereClauses.push("c.veh_class = $veh_class");
       params.veh_class = filters.veh_class;
     }
 
@@ -123,12 +123,12 @@ async function fetchFilteredOptions(filters) {
       MATCH (c:cars)
       ${whereString}
       RETURN
-        collect(distinct c.Model)         AS models,
-        collect(distinct c.Trans)         AS transmissions,
-        collect(distinct c.Drive)         AS driveTypes,
-        collect(distinct c.Fuel)          AS fuelTypes,
-        collect(distinct c.Stnd)          AS emissionsStandards,
-        collect(distinct c.Veh_Class)     AS vehicleClasses
+        collect(distinct c.model)         AS models,
+        collect(distinct c.transmission)  AS transmissions,
+        collect(distinct c.drive)         AS driveTypes,
+        collect(distinct c.fuel)          AS fuelTypes,
+        collect(distinct c.stnd)          AS emissionsStandards,
+        collect(distinct c.veh_class)     AS vehicleClasses
     `;
 
     console.log("[DEBUG] fetchFilteredOptions -> Cypher query:\n", query);

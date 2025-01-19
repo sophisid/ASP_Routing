@@ -40,7 +40,8 @@ async function isDatabaseEmpty() {
     const session = driver.session({ database: config.neo4jDatabase });
     const query = 'MATCH (n) RETURN count(n) AS node_count';
     const result = await session.run(query);
-    const nodeCount = result.records[0].get('node_count');
+    const nodeCount = result.records[0].get('node_count').toNumber();
+    console.log('Node count:', nodeCount);
     await session.close();
     return nodeCount === 0;
   } catch (error) {
@@ -51,7 +52,7 @@ async function isDatabaseEmpty() {
 
 function populateDatabase() {
   return new Promise((resolve, reject) => {
-    const pythonScriptPath = path.join(__dirname, 'load_neo4j.py');
+    const pythonScriptPath = path.join(__dirname, '..', '..', 'initcars', 'load_neo4j.py');
     execFile('python3', [pythonScriptPath], (err, stdout, stderr) => {
       if (err) {
         console.error('Error running Python script:', err);
@@ -259,6 +260,29 @@ async function loadVehiclesFromNeo4j() {
     await session.close();
   }
 }
+
+// ----------------------------------------------------------------------------
+// create a router /checkonload that will call the function checkAndPopulateDatabase
+router.get('/checkonload', 
+  async (req, res) => {
+    try {
+      console.log('Checking if the database is empty...');
+      const isEmpty = await isDatabaseEmpty();
+      if (isEmpty) {
+        console.log('Database is empty. Populating...');
+        await populateDatabase();
+        console.log('Database populated successfully.');
+      } else {
+        console.log('Database is not empty. Skipping population.');
+      }
+      res.status(200).json({ message: 'Database check and population completed' });
+    }
+    catch (error) {
+      console.error('Error during database check and population:', error);
+      res.status(500).send('Internal server error during database initialization.');
+    }
+  }
+);
 
 // ----------------------------------------------------------------------------
 // 1) Example route: loadNodes
@@ -526,6 +550,7 @@ router.get('/retrieveASPrules', async (req, res) => {
   try {
     const nodes = await loadStopsFromNeo4j();
     const vehicles = await loadVehiclesFromNeo4j();
+    console.log('Loaded:', vehicles);
     let aspFacts = '';
     const processedNodes = new Set();
 
@@ -575,11 +600,55 @@ router.get('/retrieveASPrules', async (req, res) => {
       if(v.fuel){
         aspFacts += `fuel(${vehicleID}, "${v.fuel}").\n`;
       }
-      // TODO test the rest of the properties and add the rules that we discussed at the README
-      
-      if (v.capacity) {
-        aspFacts += `capacity(${vehicleID}, ${v.capacity}).\n`;
+      if(v.air_pollution_score){
+        aspFacts += `air_pollution_score(${vehicleID}, "${v.air_pollution_score}").\n`;
       }
+      if(v.transmission){
+        aspFacts += `transmission(${vehicleID}, "${v.transmission}").\n`;
+      }
+      if(v.underhood_id){
+        aspFacts += `underhood_id(${vehicleID}, "${v.underhood_id}").\n`;
+      }
+      if(v.veh_class){
+        aspFacts += `veh_class(${vehicleID}, "${v.veh_class}").\n`;
+      }
+      if(v.city_mpg){
+        aspFacts += `city_mpg(${vehicleID}, ${v.city_mpg}).\n`;
+      }
+      if(v.hwy_mpg){
+        aspFacts += `hwy_mpg(${vehicleID}, ${v.hwy_mpg}).\n`;
+      }
+      if(v.cmb_mpg){
+        aspFacts += `cmb_mpg(${vehicleID}, ${v.cmb_mpg}).\n`;
+      }
+      if(v.greenhouse_gas_score){
+        aspFacts += `greenhouse_gas_score(${vehicleID}, "${v.greenhouse_gas_score}").\n`;
+      }
+      if(v.smartway){
+        aspFacts += `smartway(${vehicleID}, "${v.smartway}").\n`;
+      }
+      if(v.price_eur){
+        aspFacts += `price_eur(${vehicleID}, ${v.price_eur}).\n`;
+      }
+      if(v.display){
+        aspFacts += `display(${vehicleID}, "${v.display}").\n`;
+      }
+      if(v.cyl){
+        aspFacts += `cyl(${vehicleID}, ${v.cyl}).\n`;
+      }
+      if(v.drive){
+        aspFacts += `drive(${vehicleID}, "${v.drive}").\n`;
+      }
+      if(v.stnd){
+        aspFacts += `stnd(${vehicleID}, "${v.stnd}").\n`;
+      }
+      if(v.stnd_description){
+        aspFacts += `stnd_description(${vehicleID}, "${v.stnd_description}").\n`;
+      }
+      if(v.cert_region){
+        aspFacts += `cert_region(${vehicleID}, "${v.cert_region}").\n`;
+      }
+
     });
 
     // (c) distance(A,B,C) via Haversine

@@ -1,20 +1,19 @@
+import os
+from pathlib import Path
 import pandas as pd
 from neo4j import GraphDatabase
 
-Vehicles25_path = "VehicleList_2025.csv"
-Vehicles10_path = "VehicleList_2010.csv"
+# Determine the current script's directory
+current_dir = Path(__file__).resolve().parent
 
+# Dynamically construct file paths relative to the script's location
+Vehicles25_path = current_dir / "VehicleList_2025.csv"
+Vehicles10_path = current_dir / "VehicleList_2010.csv"
+
+# Load CSV files
 df25 = pd.read_csv(Vehicles25_path)
 df10 = pd.read_csv(Vehicles10_path)
 
-# print(df25.head())
-
-# Check column names and data types
-# print("\nColumn names:")
-# print(df25.columns)
-
-# print("\nData types:")
-# print(df25.dtypes)
 
 NEO4J_URI = "bolt://localhost:7687"
 NEO4J_USER = "neo4j"
@@ -34,23 +33,24 @@ def load_to_neo4j(driver, dataframe, label_name):
         for _, row in dataframe.iterrows():
             query = f"""
             CREATE (:{label_name}  {{
-                Model: $Model,
-                Displ: $Displ,
-                Cyl: $Cyl,
-                Trans: $Trans,
-                Drive: $Drive,
-                Fuel: $Fuel,
-                Cert_Region: $Cert_Region,
-                Stnd: $Stnd,
-                Stnd_Description: $Stnd_Description,
-                Veh_Class: $Veh_Class,
-                Air_Pollution_Score: $Air_Pollution_Score,
-                City_MPG: $City_MPG,
-                Hwy_MPG: $Hwy_MPG,
-                Cmb_MPG: $Cmb_MPG,
-                Greenhouse_Gas_Score: $Greenhouse_Gas_Score,
-                SmartWay: $SmartWay,
-                Price_EUR: $Price_EUR
+                model: $Model,
+                display: $Displ,
+                cyl: $Cyl,
+                transmission: $Trans,
+                drive_type: $Drive,
+                fuel: $Fuel,
+                cert_region: $Cert_Region,
+                stnd: $Stnd,
+                stnd_description: $Stnd_Description,
+                veh_class: $Veh_Class,
+                air_pollution_score: $Air_Pollution_Score,
+                city_mpg: $City_MPG,
+                hwy_mpg: $Hwy_MPG,
+                cmb_mpg: $Cmb_MPG,
+                greenhouse_gas_score: $Greenhouse_Gas_Score,
+                smartway: $SmartWay,
+                price_eur: $Price_EUR,
+                underhood_id: $Underhood_ID
             }})
             """
             # Convert NaN to None

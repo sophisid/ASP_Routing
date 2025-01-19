@@ -75,7 +75,7 @@ export const sharedData = {
 
 
 // const map = L.map("map", { zoomControl: false }).setView([35.338735, 25.144213], 13);
-const map = L.map("map", { zoomControl: false }).setView([35.208538, 25.373590], 20);
+const map = L.map("map", { zoomControl: false }).setView([35.337539, 25.1640211], 20);
 
 L.control
   .zoom({
@@ -127,7 +127,7 @@ export function loadNodesFromNeo4j() {
   //%%% HY567 %%% Create a cypher query to retrieve node info and modify the code that follows accordingly.
 
   const fetchNodesQuery = `
-    MATCH (n:Node) RETURN n LIMIT 5
+    MATCH (n:Node) RETURN n 
   `;
 
   session
@@ -205,12 +205,28 @@ export function loadVehiclesFromNeo4j() {
     const fetchVehiclesQuery = `
       MATCH (n:Vehicle)
       RETURN n
-      LIMIT 25
     `;
 
     session
       .run(fetchVehiclesQuery)
       .then(result => {
+        if(result.records.length === 0) {
+          console.log("No vehicles found in the database.");
+          // run the backend router checkonload
+          // showMessage('No vehicles found in the database.', 2);
+          fetch('http://localhost:3000/neo4j/checkonload')
+            .then(response => {
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+              return response.json();
+            }
+            )
+            .catch(error => {
+              console.error("Error fetching vehicles from Neo4j:", error);
+              reject(error); // Reject the Promise on error
+            });
+        }else{
         const vehicles = result.records.map(record => {
           const node = record.get("n");
           const { vehicleID, capacity, model, price } = node.properties;
@@ -219,6 +235,7 @@ export function loadVehiclesFromNeo4j() {
 
         console.log("Loaded vehicles from DB:", vehicles);
         resolve(vehicles); // Resolve the Promise with the vehicles
+      }
       })
       .catch(error => {
         console.error("Error fetching vehicles from Neo4j:", error);
