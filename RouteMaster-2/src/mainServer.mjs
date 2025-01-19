@@ -217,7 +217,7 @@ async function loadVehiclesFromNeo4j() {
               v.drive AS drive,
               v.stnd AS stnd,
               v.stnd_description AS stnd_description,
-              n.cert_region as cert_region
+              v.cert_region AS cert_region,
               v.transmission AS transmission,
               v.underhood_id AS underhood_id,
               v.veh_class AS veh_class,
@@ -236,7 +236,7 @@ async function loadVehiclesFromNeo4j() {
       cert_region: record.get('cert_region'),
       transmission: record.get('transmission'),
       fuel: record.get('fuel'),
-      drive_type: record.get('drive_type'),
+      drive: record.get('drive'),
       price: record.get('price_eur'),
       air_pollution_score: record.get('air_pollution_score'),
       smartway: record.get('smartway'),
@@ -319,7 +319,7 @@ router.get('/loadNodes', async (req, res) => {
       cert_region: record.get('cert_region'),
       transmission: record.get('transmission'),
       fuel: record.get('fuel'),
-      drive_type: record.get('drive_type'),
+      drive: record.get('drive'),
       price: record.get('price_eur'),
       air_pollution_score: record.get('air_pollution_score'),
       smartway: record.get('smartway'),
@@ -377,7 +377,7 @@ router.get('/loadVehicles', async (req, res) => {
       transmission: record.get('transmission'),
       cert_region: record.get('cerd_region'),
       fuel: record.get('fuel'),
-      drive_type: record.get('drive_type'),
+      drive: record.get('drive'),
       price: record.get('price_eur'),
       air_pollution_score: record.get('air_pollution_score'),
       smartway: record.get('smartway'),
@@ -562,7 +562,7 @@ router.get('/retrieveASPrules', async (req, res) => {
     let nodeName = transliterate(node.name || k++)
       .toLowerCase()
       .replace(/[^a-z0-9_]+/g, '')
-      + '_' + i++;
+      + '_' + k;
 
     if (!nodeName.match(/^[a-z]/)) {
       nodeName = 'node_' + nodeName; // Prefix if it doesn't start with a letter
@@ -589,7 +589,7 @@ router.get('/retrieveASPrules', async (req, res) => {
     // (b) vehicle(...)
     let i=0;
     vehicles.forEach((v) => {
-      let vehicleID = transliterate(v.vehicleName || i++)
+      let vehicleID = transliterate(String(v.vehicleID || i++))
         .toLowerCase()
         .replace(/[^a-z0-9_]+/g, '');
       if (!vehicleID.match(/^[a-z]/)) {

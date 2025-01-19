@@ -466,7 +466,7 @@ export async function createVehicleInNeo4j(vehicleData) {
         transmission: $transmission,
         drive:     $drive,
         fuel:      $fuel,
-        cert_region: $Cert_region,
+        cert_region: $cert_region,
         stnd:      $stnd,
         stnd_description: $stnd_description,
         underhood_id: $underhood_id,
