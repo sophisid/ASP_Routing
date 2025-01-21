@@ -369,7 +369,7 @@ router.get('/loadVehicles', async (req, res) => {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
     const fetchVehiclesQuery = `
-      MATCH (v:cars)
+      MATCH (n:cars)
       RETURN v.vehicleName AS vehicleName, 
               v.model AS model,
               v.fuel AS fuel,
