@@ -106,9 +106,11 @@ prepei na mpei :
 
 Node : node(X) :- latitude(X, _), longitude(X, _).
 Vehicle : vehicle(X) :- transmission(X, _), fuel(X, _), air_pollution_score(X, _), display(X, _), cyl(X, _), drive(X, _), stnd(X, _), stnd_description(X, _), cert_region(X, _), transmission(X, _), underhood_id(X, _), veh_class(X, _), city_mpg(X, _), hwy_mpg(X, _), cmb_mpg(X, _), greenhouse_gas_score(X, _), smartway(X, _), price_eur(X, _). 
-Distance : distance(X, Y, Z) :- latitude(X, Lat1), longitude(X, Long1), latitude(Y, Lat2), longitude(Y, Long2), Z = sqrt((Lat1 - Lat2)^2 + (Long1 - Long2)^2).
-Route : route(X, Y, Z) :- distance(X, Y, Z), vehicle(X), vehicle(Y), X != Y.
+Starting point: starting_point(V,X) :- vehicle(V), display(V, 'Starting Point'), node(X). 
+Ending point: ending_point(V,X) :- vehicle(V), display(V, 'Ending Point'), node(X).
 Friendly environment : friendly_environment(X) :- vehicle(X), air_pollution_score(X, Score), Score <= 7.
+Distance : distance(X, Y, Z) :- latitude(X, Lat1), longitude(X, Long1), latitude(Y, Lat2), longitude(Y, Long2), Z = sqrt((Lat1 - Lat2)^2 + (Long1 - Long2)^2).
+Route : route(X, Y, Z, V) :- distance(X, Y, Z), vehicle(V), duration(X, Y, Z, V).
 
 
 %%%%%%%%%%%%%%%%%%

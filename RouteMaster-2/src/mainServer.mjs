@@ -343,13 +343,33 @@ router.get('/loadNodes', async (req, res) => {
     await session.close();
   }
 });
+router.get('/populateVehiclesFromCars', async(req, res) => {
+  const session = driver.session({ database: config.neo4jDatabase });
+  try {
+    const veh = await loadVehiclesFromNeo4j();
+    res.json(veh);
+    // get the cars abd filter the cars that have only the properties of the vehicles above
+
+
+   
+    console.log('--> #vehicles:', vehicles.length);
+    res.json(vehicles);
+
+  } catch (error) {
+    console.error('Error fetching vehicles:', error);
+    res.status(500).send('Failed to load vehicles.');
+  } finally {
+    await session.close();
+  } 
+})
+
 
 // 2) Example route: loadVehicles
 router.get('/loadVehicles', async (req, res) => {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
     const fetchVehiclesQuery = `
-      MATCH (n:cars)
+      MATCH (v:cars)
       RETURN v.vehicleName AS vehicleName, 
               v.model AS model,
               v.fuel AS fuel,
@@ -548,8 +568,10 @@ router.get('/getRoutes', async (req, res) => {
 // 5) Example route: build an ASP rules string from DB stops & vehicles
 router.get('/retrieveASPrules', async (req, res) => {
   try {
+
     const nodes = await loadStopsFromNeo4j();
     const vehicles = await loadVehiclesFromNeo4j();
+    // const vehicles = await populateVehiclesFromCars();
     console.log('Loaded:', vehicles);
     let aspFacts = '';
     const processedNodes = new Set();
@@ -648,6 +670,21 @@ router.get('/retrieveASPrules', async (req, res) => {
       if(v.cert_region){
         aspFacts += `cert_region(${vehicleID}, "${v.cert_region}").\n`;
       }
+
+      // aspFacts += `friendly_environment(${vehicleID}).\n`;
+      // aspFacts += `vehicle(${vehicleID}).\n`;
+      // if(v.air_pollution_score){
+      //   aspFacts += `air_pollution_score(${vehicleID}, "${v.air_pollution_score}").\n`;
+      // }
+
+      // aspFacts += `air_pollution_score(${vehicleID}).\n`;
+
+      if(v.air_pollution_score)
+      {
+        aspFacts += `friendly_environment(${vehicleID}).\n`;
+        aspFacts += `vehicle(${vehicleID}) , air_pollution_score(${vehicleID}, "${v.air_pollution_score}"), ${v.air_pollution_score} <=7 .\n`; 
+      }
+
 
     });
 
