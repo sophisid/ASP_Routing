@@ -203,34 +203,39 @@ async function loadStopsFromNeo4j() {
   }
 }
 
-async function mergeVehiclesFromNeo4j() {
+async function mergeVehiclesFromNeo4j(filter = {}) {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
+    // Build dynamic filter conditions
+    const conditions = Object.entries(filter)
+      .map(([key, value]) => `c.${key} = '${value}'`)
+      .join(' AND ');
+
     const mergeVehiclesQuery = `
       MATCH (v:Vehicle), (c:cars)
-      WHERE v.ID = c.ID
+      WHERE ${conditions.length > 0 ? conditions : 'true'}
       SET v += {
-        vehicleName: c.vehicleName,
-        model: c.model,
-        fuel: c.fuel,
-        air_pollution_score: c.air_pollution_score,
-        display: c.display,
-        cyl: c.cyl,
-        drive: c.drive,
-        stnd: c.stnd,
-        stnd_description: c.stnd_description,
-        cert_region: c.cert_region,
-        transmission: c.transmission,
-        underhood_id: c.underhood_id,
-        veh_class: c.veh_class,
-        city_mpg: c.city_mpg,
-        hwy_mpg: c.hwy_mpg,
-        cmb_mpg: c.cmb_mpg,
-        greenhouse_gas_score: c.greenhouse_gas_score,
-        smartway: c.smartway,
-        price_eur: c.price_eur
-      }
-      RETURN v.ID AS id, v.vehicleName AS vehicleName, 
+            vehicleName: c.vehicleName,
+            model: c.model,
+            fuel: c.fuel,
+            air_pollution_score: c.air_pollution_score,
+            display: c.display,
+            cyl: c.cyl,
+            drive: c.drive,
+            stnd: c.stnd,
+            stnd_description: c.stnd_description,
+            cert_region: c.cert_region,
+            transmission: c.transmission,
+            underhood_id: c.underhood_id,
+            veh_class: c.veh_class,
+            city_mpg: c.city_mpg,
+            hwy_mpg: c.hwy_mpg,
+            cmb_mpg: c.cmb_mpg,
+            greenhouse_gas_score: c.greenhouse_gas_score,
+            smartway: c.smartway,
+            price_eur: c.price_eur
+          }
+      RETURN v.vehicleName AS vehicleName, 
              v.model AS model,
              v.fuel AS fuel,
              v.air_pollution_score AS air_pollution_score,
@@ -255,7 +260,6 @@ async function mergeVehiclesFromNeo4j() {
 
     // Extract results
     const mergedVehicles = result.records.map((record) => ({
-      id: record.get('id'),
       vehicleName: record.get('vehicleName'),
       model: record.get('model'),
       fuel: record.get('fuel'),
@@ -286,7 +290,6 @@ async function mergeVehiclesFromNeo4j() {
     await session.close();
   }
 }
-
 
 async function loadVehiclesFromNeo4j() {
   const session = driver.session({ database: config.neo4jDatabase });
@@ -376,8 +379,7 @@ router.get('/loadNodes', async (req, res) => {
   try {
     const fetchNodesQuery = `
       MATCH (n:cars)
-      RETURN  n.ID as ID,
-              n.vehicleName AS vehicleName, 
+      RETURN  n.vehicleName AS vehicleName, 
               n.model AS model,
               n.fuel AS fuel,
               n.air_pollution_score AS air_pollution_score,
@@ -400,7 +402,6 @@ router.get('/loadNodes', async (req, res) => {
     `;
     const result = await session.run(fetchNodesQuery);
     const nodes = result.records.map((record) => ({
-      id: record.get('id'),
       vehicleName: record.get('vehicleName'),
       model: record.get('model'),
       cert_region: record.get('cert_region'),
@@ -663,6 +664,22 @@ router.get('/retrieveASPrules', async (req, res) => {
     let aspFacts = '';
     const processedNodes = new Set();
 
+    const addStringFact = (predicate, ...args) => {
+      aspFacts += `${predicate}(${args.map((arg) => `"${arg}"`).join(', ')}).
+`;
+    };
+
+    const addNumericFact = (predicate, ...args) => {
+      aspFacts += `${predicate}(${args.join(', ')}).
+`;
+    };
+
+    const addRule = (head, bodyConditions) => {
+      aspFacts += `${head} :- ${bodyConditions.join(', ')}.
+`;
+    };
+
+
     // (a) node(...)
     let k=0;
   nodes.forEach((node) => {
@@ -686,13 +703,13 @@ router.get('/retrieveASPrules', async (req, res) => {
     const longitude = `"${node.longitude}"`;
 
     // Generate ASP facts
-    aspFacts += `node(${nodeName}).\n`;
-    aspFacts += `latitude(${nodeName}, ${latitude}).\n`;
-    aspFacts += `longitude(${nodeName}, ${longitude}).\n`;
+    addStringFact('node', nodeName);
+    addStringFact('latitude', nodeName, node.latitude);
+    addStringFact('longitude', nodeName, node.longitude);
     if (node.demand) {
-      aspFacts += `demand(${nodeName}, ${node.demand}).\n`;
+      addNumericFact('demand', nodeName, node.demand);
     }
-  });
+});
 
 
     // (b) vehicle(...)
@@ -705,58 +722,25 @@ router.get('/retrieveASPrules', async (req, res) => {
         vehicleID = 'vehicle_' + vehicleID;
       }
 
-      aspFacts += `vehicle(${vehicleID}).\n`;
-      if(v.fuel){
-        aspFacts += `fuel(${vehicleID}, "${v.fuel}").\n`;
-      }
-      if(v.air_pollution_score){
-        aspFacts += `air_pollution_score(${vehicleID}, "${v.air_pollution_score}").\n`;
-      }
-      if(v.transmission){
-        aspFacts += `transmission(${vehicleID}, "${v.transmission}").\n`;
-      }
-      if(v.underhood_id){
-        aspFacts += `underhood_id(${vehicleID}, "${v.underhood_id}").\n`;
-      }
-      if(v.veh_class){
-        aspFacts += `veh_class(${vehicleID}, "${v.veh_class}").\n`;
-      }
-      if(v.city_mpg){
-        aspFacts += `city_mpg(${vehicleID}, ${v.city_mpg}).\n`;
-      }
-      if(v.hwy_mpg){
-        aspFacts += `hwy_mpg(${vehicleID}, ${v.hwy_mpg}).\n`;
-      }
-      if(v.cmb_mpg){
-        aspFacts += `cmb_mpg(${vehicleID}, ${v.cmb_mpg}).\n`;
-      }
-      if(v.greenhouse_gas_score){
-        aspFacts += `greenhouse_gas_score(${vehicleID}, "${v.greenhouse_gas_score}").\n`;
-      }
-      if(v.smartway){
-        aspFacts += `smartway(${vehicleID}, "${v.smartway}").\n`;
-      }
-      if(v.price_eur){
-        aspFacts += `price_eur(${vehicleID}, ${v.price_eur}).\n`;
-      }
-      if(v.display){
-        aspFacts += `display(${vehicleID}, "${v.display}").\n`;
-      }
-      if(v.cyl){
-        aspFacts += `cyl(${vehicleID}, ${v.cyl}).\n`;
-      }
-      if(v.drive){
-        aspFacts += `drive(${vehicleID}, "${v.drive}").\n`;
-      }
-      if(v.stnd){
-        aspFacts += `stnd(${vehicleID}, "${v.stnd}").\n`;
-      }
-      if(v.stnd_description){
-        aspFacts += `stnd_description(${vehicleID}, "${v.stnd_description}").\n`;
-      }
-      if(v.cert_region){
-        aspFacts += `cert_region(${vehicleID}, "${v.cert_region}").\n`;
-      }
+      addStringFact('vehicle', vehicleID);
+      if (v.fuel) addStringFact('fuel', vehicleID, v.fuel);
+
+      if (v.air_pollution_score) addStringFact('air_pollution_score', vehicleID, v.air_pollution_score);
+      if (v.transmission) addStringFact('transmission', vehicleID, v.transmission);
+      if (v.underhood_id) addStringFact('underhood_id', vehicleID, v.underhood_id);
+      if (v.veh_class) addStringFact('veh_class', vehicleID, v.veh_class);
+      if (v.city_mpg) addNumericFact('city_mpg', vehicleID, v.city_mpg);
+      if (v.hwy_mpg) addNumericFact('hwy_mpg', vehicleID, v.hwy_mpg);
+      if (v.cmb_mpg) addNumericFact('cmb_mpg', vehicleID, v.cmb_mpg);
+      if (v.greenhouse_gas_score) addStringFact('greenhouse_gas_score', vehicleID, v.greenhouse_gas_score);
+      if (v.smartway) addStringFact('smartway', vehicleID, v.smartway);
+      if (v.price_eur) addNumericFact('price_eur', vehicleID, v.price_eur);
+      if (v.display) addStringFact('display', vehicleID, v.display);
+      if (v.cyl) addNumericFact('cyl', vehicleID, v.cyl);
+      if (v.drive) addStringFact('drive', vehicleID, v.drive);
+      if (v.stnd) addStringFact('stnd', vehicleID, v.stnd);
+      if (v.stnd_description) addStringFact('stnd_description', vehicleID, v.stnd_description);
+      if (v.cert_region) addStringFact('cert_region', vehicleID, v.cert_region);
 
       // aspFacts += `friendly_environment(${vehicleID}).\n`;
       // aspFacts += `vehicle(${vehicleID}).\n`;
@@ -770,7 +754,10 @@ router.get('/retrieveASPrules', async (req, res) => {
         const score = Number(v.air_pollution_score);
         
         if (!isNaN(score)) {
-          aspFacts += `friendly_environment(${vehicleID}) :- vehicle(${vehicleID}), air_pollution_score(${vehicleID}, ${score}), ${score} <= 7.\n`;
+          addRule(
+            `friendly_environment(${vehicleID})`,
+            [`vehicle(${vehicleID})`, `air_pollution_score(${vehicleID}, ${score})`, `${score} <= 7`]
+          );
         } else {
           console.warn(`Invalid air_pollution_score for vehicle ${vehicleID}: ${v.air_pollution_score}`);
         }
@@ -795,7 +782,7 @@ router.get('/retrieveASPrules', async (req, res) => {
         toName = 'unknown';
       }
 
-      aspFacts += `distance(${fromName}, ${toName}, ${dist.distance}).\n`;
+      addNumericFact('distance', fromName, toName, dist.distance);
     });
 
     return res.type('text/plain').send(aspFacts);
