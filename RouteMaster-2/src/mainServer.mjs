@@ -203,6 +203,91 @@ async function loadStopsFromNeo4j() {
   }
 }
 
+async function mergeVehiclesFromNeo4j() {
+  const session = driver.session({ database: config.neo4jDatabase });
+  try {
+    const mergeVehiclesQuery = `
+      MATCH (v:Vehicle), (c:cars)
+      WHERE v.ID = c.ID
+      SET v += {
+        vehicleName: c.vehicleName,
+        model: c.model,
+        fuel: c.fuel,
+        air_pollution_score: c.air_pollution_score,
+        display: c.display,
+        cyl: c.cyl,
+        drive: c.drive,
+        stnd: c.stnd,
+        stnd_description: c.stnd_description,
+        cert_region: c.cert_region,
+        transmission: c.transmission,
+        underhood_id: c.underhood_id,
+        veh_class: c.veh_class,
+        city_mpg: c.city_mpg,
+        hwy_mpg: c.hwy_mpg,
+        cmb_mpg: c.cmb_mpg,
+        greenhouse_gas_score: c.greenhouse_gas_score,
+        smartway: c.smartway,
+        price_eur: c.price_eur
+      }
+      RETURN v.ID AS id, v.vehicleName AS vehicleName, 
+             v.model AS model,
+             v.fuel AS fuel,
+             v.air_pollution_score AS air_pollution_score,
+             v.display AS display,
+             v.cyl AS cyl,
+             v.drive AS drive,
+             v.stnd AS stnd,
+             v.stnd_description AS stnd_description,
+             v.cert_region AS cert_region,
+             v.transmission AS transmission,
+             v.underhood_id AS underhood_id,
+             v.veh_class AS veh_class,
+             v.city_mpg AS city_mpg,
+             v.hwy_mpg AS hwy_mpg,
+             v.cmb_mpg AS cmb_mpg,
+             v.greenhouse_gas_score AS greenhouse_gas_score,
+             v.smartway AS smartway,
+             v.price_eur AS price_eur;
+    `;
+
+    const result = await session.run(mergeVehiclesQuery);
+
+    // Extract results
+    const mergedVehicles = result.records.map((record) => ({
+      id: record.get('id'),
+      vehicleName: record.get('vehicleName'),
+      model: record.get('model'),
+      fuel: record.get('fuel'),
+      air_pollution_score: record.get('air_pollution_score'),
+      display: record.get('display'),
+      cyl: record.get('cyl'),
+      drive: record.get('drive'),
+      stnd: record.get('stnd'),
+      stnd_description: record.get('stnd_description'),
+      cert_region: record.get('cert_region'),
+      transmission: record.get('transmission'),
+      underhood_id: record.get('underhood_id'),
+      veh_class: record.get('veh_class'),
+      city_mpg: record.get('city_mpg'),
+      hwy_mpg: record.get('hwy_mpg'),
+      cmb_mpg: record.get('cmb_mpg'),
+      greenhouse_gas_score: record.get('greenhouse_gas_score'),
+      smartway: record.get('smartway'),
+      price_eur: record.get('price_eur'),
+    }));
+
+    console.log('Merged vehicles:', mergedVehicles);
+    return mergedVehicles;
+  } catch (error) {
+    console.error('Error merging vehicles:', error);
+    throw new Error('Failed to merge vehicles.');
+  } finally {
+    await session.close();
+  }
+}
+
+
 async function loadVehiclesFromNeo4j() {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
@@ -291,7 +376,8 @@ router.get('/loadNodes', async (req, res) => {
   try {
     const fetchNodesQuery = `
       MATCH (n:cars)
-      RETURN  n.vehicleName AS vehicleName, 
+      RETURN  n.ID as ID,
+              n.vehicleName AS vehicleName, 
               n.model AS model,
               n.fuel AS fuel,
               n.air_pollution_score AS air_pollution_score,
@@ -300,7 +386,7 @@ router.get('/loadNodes', async (req, res) => {
               n.drive AS drive,
               n.stnd AS stnd,
               n.stnd_description AS stnd_description,
-              n.cert_region as cert_region
+              n.cert_region as cert_region,
               n.transmission AS transmission,
               n.underhood_id AS underhood_id,
               n.veh_class AS veh_class,
@@ -314,6 +400,7 @@ router.get('/loadNodes', async (req, res) => {
     `;
     const result = await session.run(fetchNodesQuery);
     const nodes = result.records.map((record) => ({
+      id: record.get('id'),
       vehicleName: record.get('vehicleName'),
       model: record.get('model'),
       cert_region: record.get('cert_region'),
@@ -570,7 +657,7 @@ router.get('/retrieveASPrules', async (req, res) => {
   try {
 
     const nodes = await loadStopsFromNeo4j();
-    const vehicles = await loadVehiclesFromNeo4j();
+    const vehicles = await mergeVehiclesFromNeo4j();
     // const vehicles = await populateVehiclesFromCars();
     console.log('Loaded:', vehicles);
     let aspFacts = '';
