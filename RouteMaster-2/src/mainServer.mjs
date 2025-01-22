@@ -679,12 +679,15 @@ router.get('/retrieveASPrules', async (req, res) => {
 
       // aspFacts += `air_pollution_score(${vehicleID}).\n`;
 
-      if(v.air_pollution_score)
-      {
-        aspFacts += `friendly_environment(${vehicleID}).\n`;
-        aspFacts += `vehicle(${vehicleID}) , air_pollution_score(${vehicleID}, "${v.air_pollution_score}"), ${v.air_pollution_score} <=7 .\n`; 
+      if (v.air_pollution_score) {
+        const score = Number(v.air_pollution_score);
+        
+        if (!isNaN(score)) {
+          aspFacts += `friendly_environment(${vehicleID}) :- vehicle(${vehicleID}), air_pollution_score(${vehicleID}, ${score}), ${score} <= 7.\n`;
+        } else {
+          console.warn(`Invalid air_pollution_score for vehicle ${vehicleID}: ${v.air_pollution_score}`);
+        }
       }
-
 
     });
 
