@@ -598,6 +598,94 @@ router.post('/getOurRoutes', async (req, res) => {
   }
 });
 
+async function fetchAndAnalyzeRoutes(locations, config) {
+  if (!locations || locations.length < 2) {
+    throw new Error('At least two locations are required.');
+  }
+
+  const payload = JSON.stringify({
+    coordinates: locations,
+    alternative_routes: {
+      target_count: 10,
+      share_factor: 0.6,
+      weight_factor: 1.2,
+    },
+    format: 'json',
+    instructions: true,
+  });
+
+  const options = {
+    hostname: 'api.openrouteservice.org',
+    path: '/v2/directions/driving-car',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Length': Buffer.byteLength(payload),
+      Authorization: '5b3ce3597851110001cf624853b2f7dc05e44b6e89a90eea9f3d135e', // Provide your ORS Key in the config object
+    },
+  };
+
+  try {
+    const orsResponse = await new Promise((resolve, reject) => {
+      const request = https.request(options, (response) => {
+        let responseData = '';
+        response.on('data', (chunk) => {
+          responseData += chunk;
+        });
+        response.on('end', () => {
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            try {
+              resolve(JSON.parse(responseData));
+            } catch (err) {
+              reject(new Error('Failed to parse ORS response'));
+            }
+          } else {
+            reject(new Error(`ORS request failed: ${response.statusCode} - ${responseData}`));
+          }
+        });
+      });
+      request.on('error', (err) => reject(err));
+      request.write(payload);
+      request.end();
+    });
+
+    const { routes } = orsResponse;
+    const analyzedRoutes = await Promise.all(
+      routes.map(async (route, index) => {
+        const decoded = polylineLib.decode(route.geometry);
+        // You can calculate tollwayDistance or elevationChanges here if needed.
+        const totalStops = route.way_points.length - 2; // Excluding start/end
+        const tollwayDistance = 0; // Your logic for tollway
+        const elevationChanges = { totalElevationGain: 0, totalElevationLoss: 0 };
+
+        return {
+          routeIndex: index,
+          distance: route.summary.distance, // in meters
+          duration: route.summary.duration, // in seconds
+          tollwayDistance,
+          totalStops,
+          elevationChanges,
+          geometry: route.geometry,
+          instructions: route.segments.flatMap((segment) =>
+            segment.steps.map((step) => ({
+              instruction: step.instruction,
+              distance: step.distance,
+              duration: step.duration,
+            }))
+          ),
+        };
+      })
+    );
+
+    return analyzedRoutes;
+  } catch (error) {
+    console.error('Error fetching ORS routes:', error.message);
+    throw new Error('Failed to fetch routes with alternatives.');
+  }
+}
+
+
+
 // 4) Example route: getRoutes (loading relationships from Neo4j)
 router.get('/getRoutes', async (req, res) => {
   // Example query: adjust to your actual relationships
@@ -679,6 +767,16 @@ router.get('/retrieveASPrules', async (req, res) => {
 `;
     };
 
+    const locations = nodes.map((node) => [node.latitude, node.longitude]);
+    const config1 = { ORS_Key: config.ORS_Key };
+    const routes = await fetchAndAnalyzeRoutes(locations, config1);
+    
+    routes.forEach((route, index) => {
+      const routeId = `r${index + 1}`;
+      addNumericFact('route', routeId);
+      addNumericFact('distance', routeId, route.distance);
+      addNumericFact('time', routeId, route.duration);
+    })
 
     // (a) node(...)
     let k=0;
@@ -721,7 +819,6 @@ router.get('/retrieveASPrules', async (req, res) => {
       if (!vehicleID.match(/^[a-z]/)) {
         vehicleID = 'vehicle_' + vehicleID;
       }
-
       addStringFact('vehicle', vehicleID);
       if (v.fuel) addStringFact('fuel', vehicleID, v.fuel);
 
