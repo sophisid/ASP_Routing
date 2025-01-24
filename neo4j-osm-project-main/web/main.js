@@ -92,7 +92,7 @@ const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 
 // Function to create a node in Neo4j using the provided data
-export function createNodeInNeo4j(name, latitude, longitude, nodeColor) { 
+export function createNodeInNeo4j(name, latitude, longitude, nodeColor, people) { 
   console.log(`Node ${name} was not saved in the database. Only UI update.`);
   
   const iconClass = getIconClass(nodeColor);
@@ -100,8 +100,10 @@ export function createNodeInNeo4j(name, latitude, longitude, nodeColor) {
       icon: mapConfig.redIcon, 
       name: name,
       nodeColor: nodeColor,
+      people: people || 0,
   }).addTo(map)
     .bindPopup(name)
+    .bindPopup(`${name} - People waiting: ${people}`)
     .bindTooltip(`<strong>Stop Name:</strong> ${name}`);
   
   nodesMarkerConf.nodeMarkers.push(marker);
@@ -127,7 +129,9 @@ export function loadNodesFromNeo4j() {
   //%%% HY567 %%% Create a cypher query to retrieve node info and modify the code that follows accordingly.
 
   const fetchNodesQuery = `
-    MATCH (n:Node) RETURN n 
+    MATCH (n:Node)
+    RETURN n.name AS name, n.latitude AS latitude, n.longitude AS longitude,
+           n.nodeColor AS nodeColor, n.people AS people 
   `;
 
   session
@@ -140,6 +144,7 @@ export function loadNodesFromNeo4j() {
         const name = record.get("name");
         const nodeColor = record.get("nodeColor");
         const vehicleName= record.get("vehicleName");
+        const people = record.get("people") || 0; 
 
         const nodes = result.records.map(record => ({
           latitude: record.get("latitude"),
@@ -147,6 +152,7 @@ export function loadNodesFromNeo4j() {
           name: record.get("name"),
           nodeColor: record.get("nodeColor"),
           vehicleName: record.get("vehicleName"),
+          people: record.get("people") || 0,
         }));
         // Check if the latitude and longitude are valid numbers
         if (!isNaN(latitude) && !isNaN(longitude)) {
@@ -172,15 +178,15 @@ export function loadNodesFromNeo4j() {
             icon: icon,
             name: name,
             nodeColor: nodeColor,
-            // vehicleName:vehicleName,
+            vehicleName:vehicleName,
+            people: people,
             //clickable:!isDisabled, //Sets the marker as disabled if the condition is true
           })
           .addTo(map)
           .bindPopup(name)
-          .bindTooltip(
-            `<strong>Stop Name:</strong> ${formatValue(name)}<br>`
-            // `<strong>vehicle Name:</strong> ${formatValue(vehicleName)}<br>`+
-          );
+          .bindPopup(`${name} - People waiting: ${people}`)
+          .bindTooltip(`<strong>Stop Name:</strong> ${name}<br/><strong>Waiting:</strong> ${people}`);
+
 
           if (!nodesMarkerConf.nodeMarkers.some(existingMarker => isMarkerEqual(existingMarker, marker))) {
             nodesMarkerConf.nodeMarkers.push(marker);
@@ -317,11 +323,13 @@ map.on("click", debounce(function (e) {
 
         // Get the modal input fields
         const nameInput = document.getElementById("name");
+        const peopleInput = document.getElementById("peopleCount");
         const colorInput = document.getElementById("color");
         const createNodeButton = document.getElementById("createNodeButton");
 
         createNodeButton.onclick = function () {
           const name = nameInput.value.trim();
+          const people = parseInt(peopleInput.value) || 0;
           const nodeColor = colorInput.value.trim();
 
       // Check if the name is provided
@@ -355,20 +363,21 @@ map.on("click", debounce(function (e) {
              //%%% HY567 %%% Modify the following cypher query for node creation.
 
              const storeNodeQuery = `
-               MERGE (n:Node {latitude: $latitude, longitude: $longitude, name: $nodeName, nodeColor: $nodeColor})
+               MERGE (n:Node {latitude: $latitude, longitude: $longitude, name: $nodeName, nodeColor: $nodeColor, people: $people})
              `;
              session.run(storeNodeQuery, {
                latitude: adjustedLat,
                longitude: adjustedLng,
                nodeName: name,
-               nodeColor: nodeColor
+               nodeColor: nodeColor,
+               people: people,
              })
                .then(() => {
                  //loadNodesFromNeo4j();
                  console.log("Node created in Neo4j with name:", name);
                  L.marker([adjustedLat, adjustedLng], { icon: icon })
                    .addTo(map)
-                   .bindPopup(`Street: ${nearestHighway}<br>Road Number: ${roadNumber}<br>Name: ${name}<br>Node Color: ${nodeColor}`);
+                   .bindPopup(`Street: ${nearestHighway}<br>Road Number: ${roadNumber}<br>Name: ${name}<br>Node Color: ${nodeColor}<br>People: ${people}`);
                })
                .catch(error => {
                  console.error("Error creating node:", error);
@@ -532,7 +541,7 @@ export function clingoRoutingRetrieval (vehicleConfig) {
               vehicleName: vehicle, // Add the vehicleName to the visitedNodes array
               isServed,
             });
-            routeCoordinates.push([visitedNode.latitude, visitedNode.longitude]);
+            routeCoordinates.push([visitedNode.longitude, visitedNode.latitude]);
           })
         }
         drawRoute(routeCoordinates, vehicle);

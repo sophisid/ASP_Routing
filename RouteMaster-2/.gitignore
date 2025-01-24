@@ -9,3 +9,6 @@ package-lock.json
 # misc
 .env
 /src/configApis/config.js
+
+# asp generated files
+/src/tempFacts.lp

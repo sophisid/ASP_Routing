@@ -197,7 +197,7 @@ function processNodesForCSV(nodes) {
   let csvContent = "name,latitude,longitude,streetName,streetNumber,nodeColor,startTime,endTime\n";
   for (const node of nodes) {
     const cleanedNodeColor = node.nodeColor.trim(); // Trim whitespace
-    csvContent += `${node.name},${node.latitude},${node.longitude},${node.streetName},${node.streetNumber},${cleanedNodeColor},${node.startTime},${node.endTime}\n`;
+    csvContent += `${node.name},${node.longitude},${node.latitude},${node.streetName},${node.streetNumber},${cleanedNodeColor},${node.startTime},${node.endTime}\n`;
   }
   return csvContent;
 }

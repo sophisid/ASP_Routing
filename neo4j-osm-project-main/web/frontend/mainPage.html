@@ -186,6 +186,16 @@
     </div>
     <input type="text" class="styled-input" id="name" placeholder="Enter name">
     <div id="nameErrorMessage" class="error-message"></div>
+    <div class="label">Number of People (max 4 per vehicle):
+      <div class="custom-tooltip">
+        <i class="fas fa-info-circle"></i>
+        <span class="tooltiptext custom-tooltiptext">
+          How many passengers are waiting here?
+        </span>
+      </div>
+    </div>
+    <input type="number" class="styled-input" id="peopleCount" min="0" max="4" value="0" placeholder="e.g. 3">
+
 
     <select id="color" style="display: none;">
     <option value="">default</option>

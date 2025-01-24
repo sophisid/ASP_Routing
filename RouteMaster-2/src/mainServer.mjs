@@ -41,7 +41,7 @@ async function isDatabaseEmpty() {
     const query = 'MATCH (n) RETURN count(n) AS node_count';
     const result = await session.run(query);
     const nodeCount = result.records[0].get('node_count').toNumber();
-    console.log('Node count:', nodeCount);
+    // console.log('Node count:', nodeCount);
     await session.close();
     return nodeCount === 0;
   } catch (error) {
@@ -92,7 +92,7 @@ async function checkAndPopulateDatabase(req, res, next) {
 // Enable CORS so that requests from localhost:8000 are allowed
 app.use(
   cors({
-    origin: 'http://localhost:8000', // or ['http://localhost:8000', ...] if you have multiple origins
+    origin: '*', // or ['http://localhost:8000', ...] if you have multiple origins
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
@@ -186,7 +186,7 @@ async function loadStopsFromNeo4j() {
       RETURN n.name AS name, 
              n.latitude AS latitude, 
              n.longitude AS longitude, 
-             n.demand AS demand
+             n.people AS demand
     `;
     const result = await session.run(fetchStopsQuery);
     return result.records.map((record) => ({
@@ -281,7 +281,7 @@ async function mergeVehiclesFromNeo4j(filter = {}) {
       price_eur: record.get('price_eur'),
     }));
 
-    console.log('Merged vehicles:', mergedVehicles);
+    // console.log('Merged vehicles:', mergedVehicles);
     return mergedVehicles;
   } catch (error) {
     console.error('Error merging vehicles:', error);
@@ -422,7 +422,7 @@ router.get('/loadNodes', async (req, res) => {
       underhood_id: record.get('underhood_id'),
       cyl: record.get('cyl'),
     }));
-    console.log('--> #nodes:', nodes.length);
+    // console.log('--> #nodes:', nodes.length);
     res.json(nodes);
   } catch (error) {
     console.error('Error fetching nodes:', error);
@@ -440,7 +440,7 @@ router.get('/populateVehiclesFromCars', async(req, res) => {
 
 
    
-    console.log('--> #vehicles:', vehicles.length);
+    // console.log('--> #vehicles:', vehicles.length);
     res.json(vehicles);
 
   } catch (error) {
@@ -598,22 +598,32 @@ router.post('/getOurRoutes', async (req, res) => {
   }
 });
 
-async function fetchAndAnalyzeRoutes(locations, config) {
+ async function fetchAndAnalyzeRoutes(locations, config) {
+  // Must have at least 2 waypoints (start/end)
   if (!locations || locations.length < 2) {
     throw new Error('At least two locations are required.');
   }
 
-  const payload = JSON.stringify({
+  // Build the payload object
+  let payloadObj = {
     coordinates: locations,
-    alternative_routes: {
+    format: 'json',
+    instructions: true
+  };
+
+  // ORS only allows alternative_routes if exactly 2 waypoints
+  if (locations.length === 2) {
+    payloadObj.alternative_routes = {
       target_count: 10,
       share_factor: 0.6,
-      weight_factor: 1.2,
-    },
-    format: 'json',
-    instructions: true,
-  });
+      weight_factor: 1.2
+    };
+  }
 
+  // Convert payload to a JSON string
+  const payload = JSON.stringify(payloadObj);
+
+  // Set up the request
   const options = {
     hostname: 'api.openrouteservice.org',
     path: '/v2/directions/driving-car',
@@ -621,58 +631,72 @@ async function fetchAndAnalyzeRoutes(locations, config) {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Content-Length': Buffer.byteLength(payload),
-      Authorization: '5b3ce3597851110001cf624853b2f7dc05e44b6e89a90eea9f3d135e', // Provide your ORS Key in the config object
-    },
+      Authorization: config.ORS_Key 
+    }
   };
 
   try {
+    // Make the HTTPS request to ORS
     const orsResponse = await new Promise((resolve, reject) => {
       const request = https.request(options, (response) => {
         let responseData = '';
+        
         response.on('data', (chunk) => {
           responseData += chunk;
         });
+        
         response.on('end', () => {
           if (response.statusCode >= 200 && response.statusCode < 300) {
             try {
-              resolve(JSON.parse(responseData));
+              const parsed = JSON.parse(responseData);
+              resolve(parsed);
             } catch (err) {
-              reject(new Error('Failed to parse ORS response'));
+              reject(new Error('Failed to parse ORS response JSON'));
             }
           } else {
-            reject(new Error(`ORS request failed: ${response.statusCode} - ${responseData}`));
+            reject(new Error(`ORS request failed: HTTP ${response.statusCode} - ${responseData}`));
           }
         });
       });
-      request.on('error', (err) => reject(err));
+
+      request.on('error', (err) => {
+        reject(err);
+      });
+
+      // Send the body
       request.write(payload);
       request.end();
     });
 
+    // Extract routes from ORS response
     const { routes } = orsResponse;
+
+    // Analyze each route
     const analyzedRoutes = await Promise.all(
       routes.map(async (route, index) => {
+        // decode the polyline if you need the list of lat/lon points
         const decoded = polylineLib.decode(route.geometry);
-        // You can calculate tollwayDistance or elevationChanges here if needed.
-        const totalStops = route.way_points.length - 2; // Excluding start/end
-        const tollwayDistance = 0; // Your logic for tollway
-        const elevationChanges = { totalElevationGain: 0, totalElevationLoss: 0 };
+
+        // Example metrics:
+        const totalStops = (route.way_points?.length || 2) - 2; // Excluding start & end
+        const tollwayDistance = 0;  // or your logic for "tollway" segments
+        const elevationChanges = { totalElevationGain: 0, totalElevationLoss: 0 }; // optional
 
         return {
           routeIndex: index,
-          distance: route.summary.distance, // in meters
-          duration: route.summary.duration, // in seconds
-          tollwayDistance,
-          totalStops,
-          elevationChanges,
-          geometry: route.geometry,
-          instructions: route.segments.flatMap((segment) =>
-            segment.steps.map((step) => ({
+          distance: route.summary.distance,    // meters
+          duration: route.summary.duration,    // seconds
+          geometry: route.geometry,            // encoded polyline
+          instructions: route.segments.flatMap((seg) =>
+            seg.steps.map((step) => ({
               instruction: step.instruction,
               distance: step.distance,
-              duration: step.duration,
+              duration: step.duration
             }))
           ),
+          totalStops,
+          tollwayDistance,
+          elevationChanges
         };
       })
     );
@@ -748,7 +772,7 @@ router.get('/retrieveASPrules', async (req, res) => {
     const nodes = await loadStopsFromNeo4j();
     const vehicles = await mergeVehiclesFromNeo4j();
     // const vehicles = await populateVehiclesFromCars();
-    console.log('Loaded:', vehicles);
+    // console.log('Loaded:', vehicles);
     let aspFacts = '';
     const processedNodes = new Set();
 
@@ -767,7 +791,7 @@ router.get('/retrieveASPrules', async (req, res) => {
 `;
     };
 
-    const locations = nodes.map((node) => [node.latitude, node.longitude]);
+    const locations = nodes.map((node) => [node.longitude, node.latitude]);
     const config1 = { ORS_Key: config.ORS_Key };
     const routes = await fetchAndAnalyzeRoutes(locations, config1);
     
@@ -910,7 +934,7 @@ router.get('/runPythonScript', (req, res) => {
         if (stderr) {
           console.error('Stderr from python script:', stderr);
         }
-        console.log('Python script output:', stdout);
+        // console.log('Python script output:', stdout);
 
         // If your script prints JSON, parse it:
         let routeData;
@@ -935,7 +959,7 @@ router.get('/stopPythonScript', (req, res) => {
   if (childProcess) {
     processStoppedByUser = true;
     childProcess.kill('SIGINT');
-    console.log('Child process to retrieve CLINGO results stopped.');
+    // console.log('Child process to retrieve CLINGO results stopped.');
     res.send('Clingo retrieval process stopped');
   } else {
     res.status(404).send('No process is running');

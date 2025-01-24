@@ -40,12 +40,13 @@ export async function fetchAllDropdownOptions() {
   
   try {
     const queries = {
-      models:              "MATCH (c:cars) RETURN DISTINCT c.model       AS value",
-      transmissions:       "MATCH (c:cars) RETURN DISTINCT c.transmission       AS value",
-      driveTypes:          "MATCH (c:cars) RETURN DISTINCT c.drive       AS value",
-      fuelTypes:           "MATCH (c:cars) RETURN DISTINCT c.fuel        AS value",
-      emissionsStandards:  "MATCH (c:cars) RETURN DISTINCT c.stnd        AS value",
-      vehicleClasses:      "MATCH (c:cars) RETURN DISTINCT c.veh_class   AS value",
+      models:              "MATCH (c:cars) RETURN DISTINCT c.model        AS value",
+      transmissions:       "MATCH (c:cars) RETURN DISTINCT c.transmission AS value",
+      driveTypes:          "MATCH (c:cars) RETURN DISTINCT c.drive        AS value",
+      fuelTypes:           "MATCH (c:cars) RETURN DISTINCT c.fuel         AS value",
+      driveTypes:          "MATCH (c:cars) RETURN DISTINCT c.drive_type   AS value",
+      emissionsStandards:  "MATCH (c:cars) RETURN DISTINCT c.stnd         AS value",
+      vehicleClasses:      "MATCH (c:cars) RETURN DISTINCT c.veh_class    AS value",
     };
 
     const dropdownOptions = {};
@@ -64,6 +65,7 @@ export async function fetchAllDropdownOptions() {
       transmissions: [],
       driveTypes: [],
       fuelTypes: [],
+      driveTypes: [],
       emissionsStandards: [],
       vehicleClasses: [],
     };
@@ -127,6 +129,7 @@ async function fetchFilteredOptions(filters) {
         collect(distinct c.transmission)  AS transmissions,
         collect(distinct c.drive)         AS driveTypes,
         collect(distinct c.fuel)          AS fuelTypes,
+        collect(distinct c.drive_type)    AS driveTypes,
         collect(distinct c.stnd)          AS emissionsStandards,
         collect(distinct c.veh_class)     AS vehicleClasses
     `;
@@ -154,6 +157,7 @@ async function fetchFilteredOptions(filters) {
       transmissions: [],
       driveTypes: [],
       fuelTypes: [],
+      driveTypes: [],
       emissionsStandards: [],
       vehicleClasses: [],
     };
@@ -164,6 +168,7 @@ async function fetchFilteredOptions(filters) {
       transmissions: [],
       driveTypes: [],
       fuelTypes: [],
+      driveTypes: [],
       emissionsStandards: [],
       vehicleClasses: [],
     };
@@ -239,7 +244,7 @@ function attachMultiFilterListeners(i) {
     // Re-populate all fields (retain current selection if still valid)
     populateDropdown(modelSelect,    filtered.models,              "-- Select Model --",           filters.model);
     populateDropdown(transSelect,    filtered.transmissions,       "-- Select Transmission --",    filters.transmission);
-    populateDropdown(driveSelect,    filtered.driveTypes,          "-- Select Drive Type --",      filters.drive);
+    populateDropdown(driveSelect,    filtered.driveTypes,          "-- Select Drive Type --",      filters.drive_type);
     populateDropdown(fuelSelect,     filtered.fuelTypes,           "-- Select Fuel Type --",       filters.fuel);
     populateDropdown(stndSelect,     filtered.emissionsStandards,  "-- Select Emissions Standard --", filters.stnd);
     populateDropdown(vehClassSelect, filtered.vehicleClasses,      "-- Select Vehicle Class --",   filters.veh_class);
@@ -295,10 +300,10 @@ async function generateVehicleConfigFields(numVehicles) {
   const dropdownOptions = await fetchAllDropdownOptions();
 
   // Fields to generate
-  const extraFields = [
+  const extraFields = [ 
     { label: "Model", name: "model", type: "dropdown", options: dropdownOptions.models },
     { label: "Transmission", name: "trans", type: "dropdown", options: dropdownOptions.transmissions },
-    { label: "Drive Type", name: "drive", type: "dropdown", options: dropdownOptions.driveTypes },
+    { label: "Drive Type", name: "drive_type", type: "dropdown", options: dropdownOptions.driveTypes },
     { label: "Fuel Type", name: "fuel", type: "dropdown", options: dropdownOptions.fuelTypes },
     { label: "Emissions Standard", name: "stnd", type: "dropdown", options: dropdownOptions.emissionsStandards },
     { label: "Vehicle Class", name: "veh_class", type: "dropdown", options: dropdownOptions.vehicleClasses },
