@@ -800,6 +800,12 @@ router.get('/retrieveASPrules', async (req, res) => {
       addNumericFact('route', routeId);
       addNumericFact('distance', routeId, route.distance);
       addNumericFact('time', routeId, route.duration);
+       const score = 2 * route.duration + route.distance;
+      addRule(`route_score(${routeId}, ${score})`, [
+      `route(${routeId})`,
+      `distance(${routeId}, ${route.distance})`,
+      `time(${routeId}, ${route.duration})`,
+      ]);
     })
 
     // (a) node(...)
@@ -846,14 +852,14 @@ router.get('/retrieveASPrules', async (req, res) => {
       addStringFact('vehicle', vehicleID);
       if (v.fuel) addStringFact('fuel', vehicleID, v.fuel);
 
-      if (v.air_pollution_score) addStringFact('air_pollution_score', vehicleID, v.air_pollution_score);
+      if (v.air_pollution_score) addNumericFact('air_pollution_score', vehicleID, v.air_pollution_score);
       if (v.transmission) addStringFact('transmission', vehicleID, v.transmission);
       if (v.underhood_id) addStringFact('underhood_id', vehicleID, v.underhood_id);
       if (v.veh_class) addStringFact('veh_class', vehicleID, v.veh_class);
       if (v.city_mpg) addNumericFact('city_mpg', vehicleID, v.city_mpg);
       if (v.hwy_mpg) addNumericFact('hwy_mpg', vehicleID, v.hwy_mpg);
       if (v.cmb_mpg) addNumericFact('cmb_mpg', vehicleID, v.cmb_mpg);
-      if (v.greenhouse_gas_score) addStringFact('greenhouse_gas_score', vehicleID, v.greenhouse_gas_score);
+      if (v.greenhouse_gas_score) addNumericFact('greenhouse_gas_score', vehicleID, v.greenhouse_gas_score);
       if (v.smartway) addStringFact('smartway', vehicleID, v.smartway);
       if (v.price_eur) addNumericFact('price_eur', vehicleID, v.price_eur);
       if (v.display) addStringFact('display', vehicleID, v.display);
@@ -863,26 +869,38 @@ router.get('/retrieveASPrules', async (req, res) => {
       if (v.stnd_description) addStringFact('stnd_description', vehicleID, v.stnd_description);
       if (v.cert_region) addStringFact('cert_region', vehicleID, v.cert_region);
 
-      // aspFacts += `friendly_environment(${vehicleID}).\n`;
-      // aspFacts += `vehicle(${vehicleID}).\n`;
-      // if(v.air_pollution_score){
-      //   aspFacts += `air_pollution_score(${vehicleID}, "${v.air_pollution_score}").\n`;
-      // }
+      
+      
+      // if (v.smartway) {
+        const isElite = v.smartway === "ELITE" ? 10 : 0; // Convert ELITE to numeric bonus
+        const aps = Number(v.air_pollution_score || 0);
+        const cityMpg = Number(v.city_mpg || 0);
+        const hwyMpg = Number(v.hwy_mpg || 0);
+        const cmbMpg = Number(v.cmb_mpg || 0);
+        const ggs = Number(v.greenhouse_gas_score || 0);
 
-      // aspFacts += `air_pollution_score(${vehicleID}).\n`;
+        const total = -aps + cityMpg + hwyMpg + cmbMpg - ggs + isElite;
 
-      if (v.air_pollution_score) {
-        const score = Number(v.air_pollution_score);
-        
-        if (!isNaN(score)) {
+        addRule(
+          `vehicle_score(${vehicleID}, ${total})`,
+          [
+            `vehicle(${vehicleID})`,
+            `air_pollution_score(${vehicleID}, ${aps})`,
+            `city_mpg(${vehicleID}, ${cityMpg})`,
+            `hwy_mpg(${vehicleID}, ${hwyMpg})`,
+            `cmb_mpg(${vehicleID}, ${cmbMpg})`,
+            `greenhouse_gas_score(${vehicleID}, ${ggs})`,
+          ]
+        );
+
+        if (v.air_pollution_score && aps <= 7) {
           addRule(
             `friendly_environment(${vehicleID})`,
-            [`vehicle(${vehicleID})`, `air_pollution_score(${vehicleID}, ${score})`, `${score} <= 7`]
+            [`vehicle(${vehicleID})`, `air_pollution_score(${vehicleID}, ${aps})`, `${aps} <= 7`]
           );
-        } else {
-          console.warn(`Invalid air_pollution_score for vehicle ${vehicleID}: ${v.air_pollution_score}`);
         }
-      }
+      // }
+
 
     });
 
