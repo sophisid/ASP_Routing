@@ -1,25 +1,30 @@
 import * as config from './configApis/config.js';
-import {showMessage,getIconClass,getSurfaceType,
-        checkIfmyNodeNameIsUnique,customAlert,isMarkerEqual} from "./tools.js";
+import {
+  showMessage,
+  getIconClass,
+  getSurfaceType,
+  checkIfmyNodeNameIsUnique,
+  customAlert,
+  isMarkerEqual,
+} from "./tools.js";
 import * as mapConfig from "./mapConfig.js";
-import {} from "./vehicleConf.js"
-import {} from "./clingoConf.js"
 
-// Function to calculate the distance between two geographical points using the Haversine formula
+import {} from "./vehicleConf.js";
+import {} from "./clingoConf.js";
+
 function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Radius of the Earth in kilometers
+  const R = 6371; // Earth radius in km
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const a = Math.sin(dLat / 2) ** 2
+          + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
+          * Math.sin(dLon / 2) ** 2;
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = R * c; // Distance in kilometers
-  return distance;
+  return R * c; 
 }
 
-const DISTANCE_THRESHOLD = 0.05; // Define a threshold distance in kilometers (e.g., 50 meters)
-//version 3:23pm
+const DISTANCE_THRESHOLD = 0.05; // e.g. 50 meters
+
 function getNearestRoad(lat, lng) {
   const nominatimURL = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
   return fetch(nominatimURL)
@@ -46,206 +51,162 @@ function getNearestRoad(lat, lng) {
 }
 
 
-// Function to create a Neo4j driver
 export var driver = neo4j.driver(
   config.neo4jUrl,
-  neo4j.auth.basic(config.neo4jUsername, config.neo4jPassword),
+  neo4j.auth.basic(config.neo4jUsername, config.neo4jPassword)
 );
 
-let currentRoute=[]; // Store the reference to the current route
+let currentRoute=[];
 let arrow=[];
-export const nodesConf = {
-  
-};
+export const nodesConf = {};
 export let availableNodes = [];
 export let availableVehicles = [];
 export const nodesMarkerConf = {
-  nodeMarkers : [],
+  nodeMarkers: [],
 };
-let specificLogOutput = '';     
-export const sharedData = {
-  
-};
+let specificLogOutput = '';
+export const sharedData = {};
 
-
-//%%% HY567 %%% If you wish to change the map, modify the following setView coordinates.
-// Be aware that clingo does not recognize greek and some other characters - if you need to use them in clingo,
-// you will have to parse them first; but most probably you will not need them for reasoning (just the ID of 
-// nodes will be sufficient)
-
-
-// const map = L.map("map", { zoomControl: false }).setView([35.338735, 25.144213], 13);
+// Initialize Leaflet map
 const map = L.map("map", { zoomControl: false }).setView([35.337539, 25.1640211], 20);
-
-L.control
-  .zoom({
-    position: "bottomright",
-  })
-  .addTo(map);
+L.control.zoom({ position: "bottomright" }).addTo(map);
 
 const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
-  attribution:
-    '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  attribution: '&copy; OpenStreetMap contributors',
 }).addTo(map);
 
-
-
-// Function to create a node in Neo4j using the provided data
-export function createNodeInNeo4j(name, latitude, longitude, nodeColor, people) { 
-  console.log(`Node ${name} was not saved in the database. Only UI update.`);
+export function createNodeInNeo4j(name, latitude, longitude, nodeColor, people) {
+  console.log(`[DEBUG] createNodeInNeo4j -> Creating node in UI only: ${name}`);
   
   const iconClass = getIconClass(nodeColor);
   const marker = L.marker([latitude, longitude], {
-      icon: mapConfig.redIcon, 
-      name: name,
-      nodeColor: nodeColor,
-      people: people || 0,
-  }).addTo(map)
-    .bindPopup(name)
+    icon: mapConfig.redIcon, // or use iconClass if needed
+    name,
+    nodeColor,
+    people: people || 0,
+  })
+    .addTo(map)
     .bindPopup(`${name} - People waiting: ${people}`)
     .bindTooltip(`<strong>Stop Name:</strong> ${name}`);
-  
+
   nodesMarkerConf.nodeMarkers.push(marker);
 }
 
-
-// Function to fetch nodes from Neo4j and load them as markers
+// ---------------------------------------------------------
+// Load Nodes from Neo4j
+// ---------------------------------------------------------
 export function loadNodesFromNeo4j() {
-  // Clear existing node markers from the map but exclude static markers
   nodesMarkerConf.nodeMarkers = nodesMarkerConf.nodeMarkers.filter(marker => {
     if (marker.options.isStatic) {
-      return true; // Keep static markers
+      return true;
     } else {
-      map.removeLayer(marker); // Remove non-static markers
+      map.removeLayer(marker);
       return false;
     }
   });
 
-  // Fetch nodes from Neo4j
-  var session = driver.session({ database: config.neo4jDatabase });
-
-
-  //%%% HY567 %%% Create a cypher query to retrieve node info and modify the code that follows accordingly.
-
+  const session = driver.session({ database: config.neo4jDatabase });
   const fetchNodesQuery = `
     MATCH (n:Node)
-    RETURN n.name AS name, n.latitude AS latitude, n.longitude AS longitude,
-           n.nodeColor AS nodeColor, n.people AS people 
+    RETURN n.name AS name,
+           n.latitude AS latitude,
+           n.longitude AS longitude,
+           n.nodeColor AS nodeColor,
+           n.people AS people
   `;
 
-  session
-    .run(fetchNodesQuery)
+  session.run(fetchNodesQuery)
     .then(result => {
-      // Process the result and create markers for each node
-      result.records.forEach(record => {
-        const latitude = record.get("latitude");
-        const longitude = record.get("longitude");
-        const name = record.get("name");
-        const nodeColor = record.get("nodeColor");
-        const vehicleName= record.get("vehicleName");
-        const people = record.get("people") || 0; 
+      const records = result.records;
+      const nodes = records.map(rec => ({
+        latitude: rec.get("latitude"),
+        longitude: rec.get("longitude"),
+        name: rec.get("name"),
+        nodeColor: rec.get("nodeColor"),
+        people: rec.get("people") || 0,
+      }));
 
-        const nodes = result.records.map(record => ({
-          latitude: record.get("latitude"),
-          longitude: record.get("longitude"),
-          name: record.get("name"),
-          nodeColor: record.get("nodeColor"),
-          vehicleName: record.get("vehicleName"),
-          people: record.get("people") || 0,
-        }));
-        // Check if the latitude and longitude are valid numbers
-        if (!isNaN(latitude) && !isNaN(longitude)) {
+      nodes.forEach(node => {
+        if (!isNaN(node.latitude) && !isNaN(node.longitude)) {
           let icon;
-          if (nodeColor === null) {
-            icon = mapConfig.redIcon; 
-          } else if (nodeColor === "yellow" ) {
-            icon = mapConfig.yellowIcon; 
-          } else if ( nodeColor === "green" ) {
-            icon = mapConfig.greenIcon; 
-          } else if ( nodeColor === "orange") {
-            icon = mapConfig.orangeIcon; 
-          } else if ( nodeColor === "blue") {
-            icon = mapConfig.blueIcon;
-          } else if ( nodeColor === "violet") {
-            icon = mapConfig.violetIcon;
-          } else {
-            // Default icon for any other case
-            icon = mapConfig.redIcon;
+          switch (node.nodeColor) {
+            case "yellow": icon = mapConfig.yellowIcon; break;
+            case "green":  icon = mapConfig.greenIcon;  break;
+            case "orange": icon = mapConfig.orangeIcon; break;
+            case "blue":   icon = mapConfig.blueIcon;   break;
+            case "violet": icon = mapConfig.violetIcon; break;
+            default:       icon = mapConfig.redIcon;    break;
           }
-          const formatValue = value => (value !== null && value !==""&& value !=="null" ? value : "-");
-          const marker = L.marker([latitude, longitude], {
-            icon: icon,
-            name: name,
-            nodeColor: nodeColor,
-            vehicleName:vehicleName,
-            people: people,
-            //clickable:!isDisabled, //Sets the marker as disabled if the condition is true
+
+          const marker = L.marker([node.latitude, node.longitude], {
+            icon,
+            name: node.name,
+            nodeColor: node.nodeColor,
+            people: node.people,
           })
-          .addTo(map)
-          .bindPopup(name)
-          .bindPopup(`${name} - People waiting: ${people}`)
-          .bindTooltip(`<strong>Stop Name:</strong> ${name}<br/><strong>Waiting:</strong> ${people}`);
+            .addTo(map)
+            .bindPopup(`${node.name} - People waiting: ${node.people}`)
+            .bindTooltip(`<strong>Stop Name:</strong> ${node.name}<br/><strong>Waiting:</strong> ${node.people}`);
 
-
-          if (!nodesMarkerConf.nodeMarkers.some(existingMarker => isMarkerEqual(existingMarker, marker))) {
+          // Avoid duplicates
+          if (!nodesMarkerConf.nodeMarkers.some(m => isMarkerEqual(m, marker))) {
             nodesMarkerConf.nodeMarkers.push(marker);
           }
         }
-        availableNodes = nodes;
-
       });
+
+      availableNodes = nodes;
     })
     .catch(error => {
       console.error("Error fetching nodes from Neo4j:", error);
     })
-    .then(() => {
+    .finally(() => {
       session.close();
     });
 }
 
+// ---------------------------------------------------------
+// Load Vehicles from Neo4j
+// ---------------------------------------------------------
 export function loadVehiclesFromNeo4j() {
   return new Promise((resolve, reject) => {
     const session = driver.session({ database: config.neo4jDatabase });
+    const fetchVehiclesQuery = `MATCH (v:Vehicle) RETURN v`;
 
-    const fetchVehiclesQuery = `
-      MATCH (n:Vehicle)
-      RETURN n
-    `;
-
-    session
-      .run(fetchVehiclesQuery)
+    session.run(fetchVehiclesQuery)
       .then(result => {
-        if(result.records.length === 0) {
+        if (!result.records.length) {
           console.log("No vehicles found in the database.");
-          // run the backend router checkonload
-          // showMessage('No vehicles found in the database.', 2);
+          // Optionally call /checkonload
           fetch('http://localhost:3000/neo4j/checkonload')
             .then(response => {
               if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
               }
               return response.json();
-            }
-            )
+            })
+            .then(() => {
+              resolve([]); 
+            })
             .catch(error => {
-              console.error("Error fetching vehicles from Neo4j:", error);
-              reject(error); // Reject the Promise on error
+              console.error("Error in checkonload:", error);
+              reject(error);
             });
-        }else{
-        const vehicles = result.records.map(record => {
-          const node = record.get("n");
-          const { vehicleID, capacity, model, price } = node.properties;
-          return { vehicleID, capacity, model, price };
-        });
-
-        console.log("Loaded vehicles from DB:", vehicles);
-        resolve(vehicles); // Resolve the Promise with the vehicles
-      }
+        } else {
+          const vehicles = result.records.map(record => {
+            const node = record.get("v");
+            // Retrieve relevant properties
+            const { vehicleID, capacity, model, price } = node.properties;
+            return { vehicleID, capacity, model, price };
+          });
+          console.log("[DEBUG] Loaded vehicles from DB:", vehicles);
+          resolve(vehicles);
+        }
       })
       .catch(error => {
         console.error("Error fetching vehicles from Neo4j:", error);
-        reject(error); // Reject the Promise on error
+        reject(error);
       })
       .finally(() => {
         session.close();
@@ -253,255 +214,197 @@ export function loadVehiclesFromNeo4j() {
   });
 }
 
-
-
+// ---------------------------------------------------------
+// updateMarkersOnMap()
+// ---------------------------------------------------------
 export function updateMarkersOnMap() {
-  // Clear the map of existing markers
+  // Remove all markers from the map
   map.eachLayer(layer => {
     if (layer instanceof L.Marker) {
       map.removeLayer(layer);
     }
   });
-  // Add the remaining markers from the nodeMarkers array
+  // Re-add markers from nodeMarkers
   nodesMarkerConf.nodeMarkers.forEach(marker => {
     marker.addTo(map);
   });
 }
 
-// You can also close the modal when clicking outside the modal content
-window.onclick = function(event) {
-  if (event.target == modal) {
-    modal.style.display = 'none';
-  }
-}
-
+// ---------------------------------------------------------
+// Creating a Node on Map Click with Debounce
+// ---------------------------------------------------------
 const modal = document.getElementById("customModal");
 export let nearestHighway;
 
 function debounce(func, delay) {
   let inDebounce;
-  return function() {
-    const context = this;
-    const args = arguments;
+  return function(...args) {
     clearTimeout(inDebounce);
-    inDebounce = setTimeout(() => func.apply(context, args), delay);
+    inDebounce = setTimeout(() => func.apply(this, args), delay);
   };
 }
 
-map.on("click", debounce(function (e) {
+map.on("click", debounce(function(e) {
   const { lat, lng } = e.latlng;
-  console.log(`Map clicked at: ${lat}, ${lng}`); // Log click coordinates
-  
+  console.log(`Map clicked at: ${lat}, ${lng}`);
+
   getSurfaceType(lat, lng)
-    .then(data => {
-      console.log("Surface Type API Response:", data); // Log the response data
-
-      // Proceed with getting the nearest road even if surface type data is null
-      return getNearestRoad(lat, lng);
+    .catch(err => {
+      console.warn("Surface Type not found:", err);
+      return null;
     })
+    .then(() => getNearestRoad(lat, lng))
     .then(nearestRoadData => {
-      console.log('Nearest road data:', nearestRoadData); // Log the nearest road data
-      if (nearestRoadData) {
-        const nearestRoad = nearestRoadData.road;
-        const adjustedLat = nearestRoadData.lat;
-        const adjustedLng = nearestRoadData.lon;
+      if (!nearestRoadData) {
+        customAlert("Stop creation is only allowed on roads.");
+        return;
+      }
 
-        // Calculate the distance between the clicked point and the nearest road
-        const distance = calculateDistance(lat, lng, adjustedLat, adjustedLng);
-        console.log(`Distance to nearest road: ${distance} km`);
+      const nearestRoad = nearestRoadData.road;
+      const adjustedLat = nearestRoadData.lat;
+      const adjustedLng = nearestRoadData.lon;
 
-        if (distance <= DISTANCE_THRESHOLD) {
-          // Show the modal immediately
-          modal.style.display = "block";
+      const distance = calculateDistance(lat, lng, adjustedLat, adjustedLng);
+      console.log(`Distance to nearest road: ${distance.toFixed(3)} km`);
 
-          // Update the nearestHighwaySpan content asynchronously
-          nearestHighwaySpan.textContent = `at "${nearestRoad}"`;
+      if (distance <= DISTANCE_THRESHOLD) {
+        // Show the modal
+        modal.style.display = "block";
+        // nearestHighwaySpan is presumably an element in your HTML
+        nearestHighwaySpan.textContent = `at "${nearestRoad}"`;
 
-
-        //%%% HY567 %%% Extend below accordingly, if you add more fields in the "create a stop.." popup.
-
-
-        // Get the modal input fields
+        // Modal inputs
         const nameInput = document.getElementById("name");
         const peopleInput = document.getElementById("peopleCount");
         const colorInput = document.getElementById("color");
         const createNodeButton = document.getElementById("createNodeButton");
 
-        createNodeButton.onclick = function () {
+        createNodeButton.onclick = function() {
           const name = nameInput.value.trim();
           const people = parseInt(peopleInput.value) || 0;
           const nodeColor = colorInput.value.trim();
 
-      // Check if the name is provided
-      if (!name) {
-        customAlert("Please fill the stop name.");
-        return;
-      }
-
-  // Close the modal after validation
-  closeModal(modal);
-
-  // Fetch additional data asynchronously
-  fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${adjustedLat}&lon=${adjustedLng}&zoom=18&addressdetails=1`)
-    .then(response => response.json())
-    .then(data => {
-      if (data && data.address) {
-        const nearestHighway = data.address.road;
-        const roadNumber = data.address.house_number || "";
-
-        let icon = mapConfig.redIcon; // Default icon if no color is provided
-        if (nodeColor === "yellow") icon = mapConfig.yellowIcon;
-        else if (nodeColor === "green") icon = mapConfig.greenIcon;
-        else if (nodeColor === "orange") icon = mapConfig.orangeIcon;
-        else if (nodeColor === "blue") icon = mapConfig.blueIcon;
-        else if (nodeColor === "violet") icon = mapConfig.violetIcon;
-
-     
-
-             const session = driver.session({ database: config.neo4jDatabase });
-
-             //%%% HY567 %%% Modify the following cypher query for node creation.
-
-             const storeNodeQuery = `
-               MERGE (n:Node {latitude: $latitude, longitude: $longitude, name: $nodeName, nodeColor: $nodeColor, people: $people})
-             `;
-             session.run(storeNodeQuery, {
-               latitude: adjustedLat,
-               longitude: adjustedLng,
-               nodeName: name,
-               nodeColor: nodeColor,
-               people: people,
-             })
-               .then(() => {
-                 //loadNodesFromNeo4j();
-                 console.log("Node created in Neo4j with name:", name);
-                 L.marker([adjustedLat, adjustedLng], { icon: icon })
-                   .addTo(map)
-                   .bindPopup(`Street: ${nearestHighway}<br>Road Number: ${roadNumber}<br>Name: ${name}<br>Node Color: ${nodeColor}<br>People: ${people}`);
-               })
-               .catch(error => {
-                 console.error("Error creating node:", error);
-               })
-               .finally(() => {
-                 session.close();
-               });
-
-
-
-      } else {
-        customAlert("No address information found at this location. Node creation is not allowed.");
-      }
-    })
-    .catch(error => {
-      console.error("Error fetching address data:", error);
-    });
-};
-
-          const closeButton = document.getElementsByClassName("close")[0];
-          closeButton.onclick = function () {
-            // Reset the input fields
-            nameInput.value = "";
-            colorInput.value = "";
-            // Close the modal
-            closeModal(modal);
-          };
-
-          // Function to close the modal
-          function closeModal(modal) {
-            modal.style.display = "none";
+          if (!name) {
+            customAlert("Please fill the stop name.");
+            return;
           }
-        } else {
-          customAlert("Stop creation is only allowed within 50 meters of a road.");
-        }
+          closeModal(modal);
+
+          // Reverse geocode once more if needed
+          fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${adjustedLat}&lon=${adjustedLng}&zoom=18&addressdetails=1`)
+            .then(response => response.json())
+            .then(data => {
+              if (data && data.address) {
+                const session = driver.session({ database: config.neo4jDatabase });
+                const storeNodeQuery = `
+                  MERGE (n:Node {
+                    latitude: $latitude,
+                    longitude: $longitude,
+                    name: $nodeName,
+                    nodeColor: $nodeColor,
+                    people: $people
+                  })
+                `;
+                session.run(storeNodeQuery, {
+                  latitude: adjustedLat,
+                  longitude: adjustedLng,
+                  nodeName: name,
+                  nodeColor,
+                  people,
+                })
+                  .then(() => {
+                    console.log(`Node created in Neo4j: ${name}`);
+                    L.marker([adjustedLat, adjustedLng], { icon: mapConfig.redIcon })
+                      .addTo(map)
+                      .bindPopup(`Street: ${nearestRoad}<br>Node: ${name}<br>Color: ${nodeColor}<br>People: ${people}`);
+                  })
+                  .catch(error => {
+                    console.error("Error creating node in Neo4j:", error);
+                  })
+                  .finally(() => {
+                    session.close();
+                  });
+              } else {
+                customAlert("No address info found here. Node creation is not allowed.");
+              }
+            })
+            .catch(error => {
+              console.error("Error fetching address data:", error);
+            });
+        };
+
+        // Close button
+        const closeButton = document.getElementsByClassName("close")[0];
+        closeButton.onclick = function() {
+          nameInput.value = "";
+          colorInput.value = "";
+          closeModal(modal);
+        };
       } else {
-        customAlert("Stop creation is only allowed on roads.");
+        customAlert("Stop creation is only allowed within 50 meters of a road.");
       }
     })
     .catch(error => {
-      console.error("Error:", error);
+      console.error("Error processing road data:", error);
     });
-}));
+}, 250));
 
-
-
-
-var clingoTimeoutWindow = document.getElementById("clingoTimeoutModal");
-
-
-
-
-
-  //%%% HY567 %%% Use this function to call the python script that executes the clingo code
-
-export function callPythonforClingoExecution () {
-
-    // showMessage("Do not execute Python Script from here. Run it as a standalone program!", 2);
-
-  
-
-
+function closeModal(m) {
+  m.style.display = "none";
 }
 
+// ---------------------------------------------------------
+// Clingo Execution Helpers
+// ---------------------------------------------------------
+export function callPythonforClingoExecution() {
+  showMessage("Do not execute Python Script from here. Run it as a standalone program!", 2);
+}
 
 export function createRelationshipsBetweenNodes(nodes) {
-  // Check if nodes array is empty
   if (!nodes || nodes.length < 2) {
     console.error("At least two nodes are required to create relationships.");
     return;
   }
-
-  // Start a Neo4j session
   const session = driver.session({ database: config.neo4jDatabase });
-
-  // Process the nodes to create relationships
   const promises = [];
 
   for (let i = 0; i < nodes.length - 1; i++) {
     const currentNode = nodes[i];
     const nextNode = nodes[i + 1];
-
     const relationshipQuery = `
       MATCH (a:Node {name: $currentNodeName}), (b:Node {name: $nextNodeName})
       MERGE (a)-[r:CONNECTED_TO {vehicleName: $vehicleName}]->(b)
       RETURN r
     `;
-
     const params = {
       currentNodeName: currentNode.node.name,
       nextNodeName: nextNode.node.name,
-      vehicleName: currentNode.vehicleName, // Use vehicle name from the array
+      vehicleName: currentNode.vehicleName,
     };
-
-    // Push the query to the promises array
     promises.push(session.run(relationshipQuery, params));
   }
 
-  // Execute all queries and handle completion
   Promise.all(promises)
     .then(results => {
       console.log("Relationships created successfully:", results.length);
     })
     .catch(error => {
-      console.error("Error creating relationships in Neo4j:", error);
+      console.error("Error creating relationships:", error);
     })
     .finally(() => {
       session.close();
     });
 }
 
+// The modal for Clingo timeout
+var clingoTimeoutWindow = document.getElementById("clingoTimeoutModal");
 
+export function clingoRoutingRetrieval(vehicleConfig) {
+  const visitedNodes = [];
+  console.log("[DEBUG] clingoRoutingRetrieval -> vehicleConfig:", vehicleConfig);
 
-
-export function clingoRoutingRetrieval (vehicleConfig) {
-  // //show loading spinner
-  // document.getElementById('loadingSpinner').style.display = 'block';
-
-  const visitedNodes = []; // Declare an array to store visited nodes
-  console.log("lalala");
-  console.log(vehicleConfig);
-
-  const busStops = nodesMarkerConf.nodeMarkers.map((marker, index) => ({
-    id: index + 2, 
+  const busStops = nodesMarkerConf.nodeMarkers.map((marker, idx) => ({
+    id: idx + 2,
     latitude: marker.getLatLng().lat,
     longitude: marker.getLatLng().lng,
     name: marker.options.name,
@@ -509,218 +412,140 @@ export function clingoRoutingRetrieval (vehicleConfig) {
 
   clingoTimeoutWindow.style.display = "block";
 
-  fetch('http://localhost:3000/neo4j/runPythonScript')
+  // If you want to pass the vehicleConfig to the server:
+  const queryParams = new URLSearchParams();
+  queryParams.append("vehicleConfig", JSON.stringify(vehicleConfig));
+
+  fetch(`http://localhost:3000/neo4j/runPythonScript?${queryParams.toString()}`)
     .then(response => {
-      if(!response.ok) {
+      if (!response.ok) {
         if (response.status === 404) throw new Error('404, Not Found');
         if (response.status === 500) throw new Error('500, Internal Server Error');
-        if (response.status === 504) throw new Error('504, Clingo script execution timed out!')
-        // For any other server error
+        if (response.status === 504) throw new Error('504, Clingo script timed out!');
         throw new Error(response.status);
       }
       clingoTimeoutWindow.style.display = "none";
       return response.json();
     })
     .then(data => {
-      console.log("Found matrix with optimal routes: ",data);
-      // display none spiner
-      // document.getElementById('loadingSpinner').style.display = 'none';
-      const earliestTimeInMinutes = data.earliestTimeInMinutes;
-
-      for (const vehicle in data.groupedMatrix) {
-        const routeCoordinates = [];
-        if (data.groupedMatrix.hasOwnProperty(vehicle)) {
-        
-          data.groupedMatrix[vehicle].map(stopEntry => {
-            const isServed = (stopEntry.includes("NotServed") ? "NotServed" : "Served");
-            const visitedNode = busStops.find(node => (node.name).toLowerCase().replace(/\s/g, '') === stopEntry[1]);
-            // console.log('visitedNode: ',visitedNode);
-
-            visitedNodes.push({
-              node: visitedNode,
-              vehicleName: vehicle, // Add the vehicleName to the visitedNodes array
-              isServed,
-            });
-            routeCoordinates.push([visitedNode.longitude, visitedNode.latitude]);
-          })
-        }
-        drawRoute(routeCoordinates, vehicle);
-        console.log(`Optimized Job By Clingo for ${vehicle} is:`, data.groupedMatrix[vehicle]);
-      }
-      
-      // filter out the non served nodes before saving into DB
-      // Create a copy of visitedNodes without "NotServed" entries
-      console.log('VISITED NODES B4 FILTERING:',visitedNodes);
-      let filteredVisitedNodes = visitedNodes.filter(node => node.isServed !== "NotServed");
-      console.log('visited nodes after filtering out the NotServed: ',filteredVisitedNodes);
-      createRelationshipsBetweenNodes(filteredVisitedNodes);
-      //loadNodesFromNeo4j();
-      clingoTimeoutWindow.style.display = "none";
-
+      console.log("[DEBUG] Clingo route data:", data);
     })
     .catch(error => {
       clingoTimeoutWindow.style.display = "none";
-      console.log(error.message)
       if (error.message.includes('Clingo retrieval process stopped')) {
-        console.log('User manually stopped the Clingo script.');
-        customAlert('The Clingo script execution was stopped by the user.');
+        console.log('User manually stopped Clingo script.');
+        customAlert('Clingo script execution was stopped by the user.');
       } else {
-        console.error(`An error occurred when calling the 'runPythonScript' service: ${error}`);
-        customAlert(`An error occurred when calling the 'runPythonScript' service: ${error}`);
+        console.error(`Error calling 'runPythonScript': ${error}`);
+        customAlert(`Error calling 'runPythonScript': ${error}`);
       }
-
     });
 }
 
-document.getElementById("clingoStopBtn").addEventListener("click", function () {
+// Stop Clingo logic
+document.getElementById("clingoStopBtn").addEventListener("click", function() {
   fetch('http://localhost:3000/neo4j/stopPythonScript')
-    .then(response => {
-      console.log('Response:', response);  // Log the response object
-      console.log('Content-Type:', response.headers.get('Content-Type')); // Check Content-Type
-      return response.text();
-    })
+    .then(response => response.text())
     .then(data => {
-      console.log(data);  // Log the response from the server
-      // Optionally hide the modal or give feedback to the user
+      console.log(data);
       document.getElementById('clingoTimeoutModal').style.display = 'none';
-      customAlert("Clingo answer set retrieval stopped successfully!",2);
+      customAlert("Clingo retrieval stopped successfully!", 2);
     })
     .catch(error => {
-      console.error('Error stopping script:', error);
+      console.error('Error stopping Clingo script:', error);
       customAlert('Error stopping script. Please try again.', 2);
     });
-})
+});
 
-
-
-
-
-
-
-
+// ---------------------------------------------------------
+// 11) resetNodes()
+// ---------------------------------------------------------
 export function resetNodes() {
   const session = driver.session({ database: config.neo4jDatabase });
 
-  const deleteAllNodesQuery = `
-    MATCH (n:Node)
-    DETACH DELETE n
-  `;
-
-  const deleteAllRelationshipsQuery = `
-    MATCH ()-[r]->()
-    DELETE r
-  `;
-
+  const deleteAllNodesQuery = `MATCH (n:Node) DETACH DELETE n`;
+  const deleteAllRelationshipsQuery = `MATCH ()-[r]->() DELETE r`;
   const updateNodeColorQuery = `
     MATCH (n:Node)
     SET n.nodeColor = 'red'
     REMOVE n.vehicleName
   `;
 
-  session
-    .run(deleteAllNodesQuery)
+  session.run(deleteAllNodesQuery)
     .then(() => {
-      console.log("All nodes labeled 'Node' deleted successfully.");
+      console.log("All (Node) deleted successfully.");
       return session.run(deleteAllRelationshipsQuery);
     })
     .then(() => {
-      console.log("All remaining relationships deleted successfully.");
+      console.log("All relationships deleted successfully.");
       return session.run(updateNodeColorQuery);
     })
     .then(() => {
       console.log("Node colors updated to red and vehicleName removed.");
-      return loadVehiclesFromNeo4j(); 
+      return loadVehiclesFromNeo4j();
     })
     .then(() => {
       console.log("Vehicles reloaded successfully.");
     })
     .catch(error => {
       console.error("Error during resetNodes:", error);
-      customAlert("Error setting up Neo4j driver. Please check your configurations.");
+      customAlert("Error setting up Neo4j driver. Check your configurations.");
     })
     .finally(() => {
       session.close();
     });
 }
 
-
-
-// JavaScript code to close the custom modal
+// ---------------------------------------------------------
+// 12) Closing Custom Modals
+// ---------------------------------------------------------
 document.getElementById('closeCustomModal').addEventListener('click', function () {
   var customModal = document.getElementById('customModal');
   customModal.style.display = 'none';
 });
 
-// JavaScript code to close the vehicle configuration modal
 document.getElementById('closeVehicleConfigModal').addEventListener('click', function () {
   var vehicleConfigModal = document.getElementById('vehicleConfigModal');
   vehicleConfigModal.style.display = 'none';
 });
 
+// ---------------------------------------------------------
+// 13) Page Load: Button Groups
+// ---------------------------------------------------------
 document.addEventListener("DOMContentLoaded", function () {
-  const actionsButton         = document.getElementById("actions-button");
-  const findRoutesButton      = document.getElementById('findroutes-button');
-  const actionsButtonGroup    = document.getElementById("actions-button-group");
-  const findRoutesButtonGroup = document.getElementById('findroutes-button-group');
+  const actionsButton      = document.getElementById("actions-button");
+  const findRoutesButton   = document.getElementById("findroutes-button");
+  const actionsButtonGroup = document.getElementById("actions-button-group");
+  const findRoutesButtonGroup = document.getElementById("findroutes-button-group");
 
   actionsButton.addEventListener("mouseenter", () => {
     actionsButtonGroup.style.display = "block";
   });
-  
   actionsButtonGroup.addEventListener("mouseleave", () => {
     actionsButtonGroup.style.display = "none";
   });
+
   findRoutesButton.addEventListener("mouseenter", () => {
-  findRoutesButtonGroup.style.display = "block";
+    findRoutesButtonGroup.style.display = "block";
+  });
+  findRoutesButtonGroup.addEventListener("mouseleave", () => {
+    findRoutesButtonGroup.style.display = "none";
+  });
 });
 
-findRoutesButtonGroup.addEventListener("mouseleave", () => {
-  findRoutesButtonGroup.style.display = "none";
-});
-  function toggleButtonGroup(group) {
-    const isVisible = group.style.display === "block";
-    group.style.display = isVisible ? "none" : "block";
-  }
-  function closeButtonGroup(group) {
-    group.style.display = "none";
-  }
- 
-  //displayStaticNode();
-
-});
-
-// Get references to the button groups
-const actionsButtonGroup    = document.getElementById('actions-button-group');
-const findRoutesButtonGroup = document.getElementById('findroutes-button-group');
-
+const actionsButtonGroup = document.getElementById('actions-button-group');
 document.getElementById('deleteAllNodesButton').addEventListener('click', () => {
-  actionsButtonGroup.style.display = 'none'; // Hide the actions-button-group
+  actionsButtonGroup.style.display = 'none';
+  // Possibly call resetNodes() or do something else
 });
 
-
+const findRoutesButtonGroup = document.getElementById('findroutes-button-group');
 document.getElementById('findRoutesClingoButton').addEventListener('click', async () => {
   findRoutesButtonGroup.style.display = 'none';
-  // await for this to return  results  before proceeding (loadVehiclesFromNeo4j()
   try {
-    // Wait for vehicles to load
     const vehicles = await loadVehiclesFromNeo4j();
-
-    // Pass vehicles to clingoRoutingRetrieval
     clingoRoutingRetrieval(vehicles);
   } catch (error) {
     console.error("Error loading vehicles:", error);
   }
 });
-
-//document.addEventListener('DOMContentLoaded', function() {
-//  const homeContainer = document.getElementById('home-container');
-
-  // Toggle the display property of the home button container
-//  function toggleHomeButton(show) {
-//    homeContainer.style.display = show ? 'block' : 'none';
-//  }
-
-  // Uncomment to show the home button
-//  toggleHomeButton(true);
-//});
-

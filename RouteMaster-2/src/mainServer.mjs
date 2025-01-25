@@ -1,4 +1,3 @@
-// mainServer.js
 import express from 'express';
 import neo4j from 'neo4j-driver';
 import cors from 'cors';
@@ -15,38 +14,41 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// If your config is in ../configApis/config.js, adjust the path accordingly:
+// Adjust the path to your config as needed
 import * as config from './configApis/config.js';
 
-// ----------------------------------------------------------------------------
-// Create Express server
+// ----------------------------------------------------------
+// Set up Express
+// ----------------------------------------------------------
 const app = express();
 const port = process.env.PORT || 3000;
 
 let childProcess = null;
-let processStoppedByUser = false; // Flag to track if the process was stopped intentionally
+let processStoppedByUser = false; // Track if process was stopped
 
-// ----------------------------------------------------------------------------
+// ----------------------------------------------------------
 // Neo4j Driver
+// ----------------------------------------------------------
 export const driver = neo4j.driver(
   config.neo4jUrl,
   neo4j.auth.basic(config.neo4jUsername, config.neo4jPassword)
 );
 
-// ----------------------------------------------------------------------------
-// Optional: If you have a script that checks if your DB is empty and populates it:
+// ----------------------------------------------------------
+// Database Check & Populate
+// ----------------------------------------------------------
 async function isDatabaseEmpty() {
+  const session = driver.session({ database: config.neo4jDatabase });
   try {
-    const session = driver.session({ database: config.neo4jDatabase });
     const query = 'MATCH (n) RETURN count(n) AS node_count';
     const result = await session.run(query);
     const nodeCount = result.records[0].get('node_count').toNumber();
-    // console.log('Node count:', nodeCount);
-    await session.close();
     return nodeCount === 0;
   } catch (error) {
-    console.error('Error checking database:', error);
+    console.error('[ERROR] Checking DB empty:', error);
     throw error;
+  } finally {
+    await session.close();
   }
 }
 
@@ -55,14 +57,13 @@ function populateDatabase() {
     const pythonScriptPath = path.join(__dirname, '..', '..', 'initcars', 'load_neo4j.py');
     execFile('python3', [pythonScriptPath], (err, stdout, stderr) => {
       if (err) {
-        console.error('Error running Python script:', err);
-        reject(err);
-        return;
+        console.error('[ERROR] Running Python script:', err);
+        return reject(err);
       }
       if (stderr) {
-        console.error('Python script stderr:', stderr);
+        console.error('[ERROR] Python script stderr:', stderr);
       }
-      console.log('Python script output:', stdout);
+      console.log('[INFO] Python script output:', stdout);
       resolve();
     });
   });
@@ -70,134 +71,126 @@ function populateDatabase() {
 
 async function checkAndPopulateDatabase(req, res, next) {
   try {
-    console.log('Checking if the database is empty...');
-    const isEmpty = await isDatabaseEmpty();
-    if (isEmpty) {
-      console.log('Database is empty. Populating...');
+    console.log('[INFO] Checking if DB is empty...');
+    const empty = await isDatabaseEmpty();
+    if (empty) {
+      console.log('[INFO] DB is empty. Populating...');
       await populateDatabase();
-      console.log('Database populated successfully.');
+      console.log('[INFO] DB populated successfully.');
     } else {
-      console.log('Database is not empty. Skipping population.');
+      console.log('[INFO] DB is not empty. Skipping populate.');
     }
     next();
   } catch (error) {
-    console.error('Error during database check and population:', error);
-    res.status(500).send('Internal server error during database initialization.');
+    console.error('[ERROR] During DB check/population:', error);
+    res.status(500).send('Internal server error during DB initialization.');
   }
 }
 
-// ----------------------------------------------------------------------------
+// ----------------------------------------------------------
 // Middleware
-
-// Enable CORS so that requests from localhost:8000 are allowed
+// ----------------------------------------------------------
 app.use(
   cors({
-    origin: '*', // or ['http://localhost:8000', ...] if you have multiple origins
+    origin: '*', // or a specific origin array
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
-
 app.use(express.json());
 
-// If your static frontend is in `../../frontend` relative to this file:
+// If your static frontend is in `../../frontend`
 const publicPath = path.join(__dirname, '..', '..', 'frontend');
 app.use(express.static(publicPath));
 
-// Use optional DB-check middleware:
+// Use the optional DB-check middleware
 app.use(checkAndPopulateDatabase);
 
-// ----------------------------------------------------------------------------
 // Serve main pages
 app.get('/', (req, res) => {
   res.sendFile(path.join(publicPath, 'homePage.html'));
 });
-
 app.get('/mainPage.html', (req, res) => {
   res.sendFile(path.join(publicPath, 'mainPage.html'));
 });
 
-// ----------------------------------------------------------------------------
-// Helpers for route logic
-function logRouteName(req, res, next) {
-  if (req.path !== '/favicon.ico') {
-    console.log(`\n-------------------------------------\nROUTE: ${req.path}  ${new Date().toString()}`);
-  }
-  next();
-}
-
+// ----------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------
 function deg2rad(deg) {
   return deg * (Math.PI / 180);
 }
 
 function computeHaversineDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371000; // Earth's radius in meters
+  const R = 6371000; // radius in meters
   const dLat = deg2rad(lat2 - lat1);
   const dLon = deg2rad(lon2 - lon1);
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(deg2rad(lat1)) *
+      Math.cos(deg2rad(lat2)) *
+      Math.sin(dLon / 2) ** 2;
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // meters
+  return R * c;
 }
 
 function computeAllDistances(stops) {
   const distances = [];
   for (let i = 0; i < stops.length; i++) {
     for (let j = i + 1; j < stops.length; j++) {
-      const nodeA = stops[i];
-      const nodeB = stops[j];
+      const A = stops[i];
+      const B = stops[j];
       const distMeters = computeHaversineDistance(
-        nodeA.latitude,
-        nodeA.longitude,
-        nodeB.latitude,
-        nodeB.longitude
+        A.latitude,
+        A.longitude,
+        B.latitude,
+        B.longitude
       );
       const distRounded = Math.round(distMeters);
-
-      distances.push({
-        from: nodeA.name,
-        to: nodeB.name,
-        distance: distRounded,
-      });
-      distances.push({
-        from: nodeB.name,
-        to: nodeA.name,
-        distance: distRounded,
-      });
+      distances.push({ from: A.name, to: B.name, distance: distRounded });
+      distances.push({ from: B.name, to: A.name, distance: distRounded });
     }
   }
   return distances;
 }
 
-// ----------------------------------------------------------------------------
-// Create Router for /neo4j
+// Log route names
+function logRouteName(req, res, next) {
+  if (req.path !== '/favicon.ico') {
+    console.log(`\n-------------------------------------`);
+    console.log(`ROUTE: ${req.path}  ${new Date().toString()}`);
+  }
+  next();
+}
+
+// Create /neo4j router
 const router = express.Router();
 app.use('/neo4j', router);
 router.use(logRouteName);
 
-// ----------------------------------------------------------------------------
+// ----------------------------------------------------------
 // Neo4j session helpers
+// ----------------------------------------------------------
 async function loadStopsFromNeo4j() {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
-    const fetchStopsQuery = `
+    const query = `
       MATCH (n:Node)
-      RETURN n.name AS name, 
-             n.latitude AS latitude, 
-             n.longitude AS longitude, 
+      RETURN n.name AS name,
+             n.latitude AS latitude,
+             n.longitude AS longitude,
              n.people AS demand
     `;
-    const result = await session.run(fetchStopsQuery);
-    return result.records.map((record) => ({
-      name: record.get('name'),
-      latitude: record.get('latitude'),
-      longitude: record.get('longitude'),
-      demand: record.get('demand') || 0,
+    const result = await session.run(query);
+    return result.records.map(rec => ({
+      name: rec.get('name'),
+      latitude: rec.get('latitude'),
+      longitude: rec.get('longitude'),
+      demand: rec.get('demand') || 0,
     }));
   } catch (error) {
-    console.error('Error loading stops from Neo4j:', error);
-    throw new Error('Failed to load stops from Neo4j.');
+    console.error('[ERROR] loadStopsFromNeo4j:', error);
+    throw new Error('Failed to load stops.');
   } finally {
     await session.close();
   }
@@ -206,60 +199,61 @@ async function loadStopsFromNeo4j() {
 async function mergeVehiclesFromNeo4j(filter = {}) {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
-    // Build dynamic filter conditions
-    const conditions = Object.entries(filter)
-      .map(([key, value]) => `c.${key} = '${value}'`)
-      .join(' AND ');
+    // Build OR conditions
+    const orConditions = Object.entries(filter)
+      .map(([key, val]) => `c.${key} = '${val}'`)
+      .join(' OR ');
+    const whereClause = orConditions.length ? orConditions : 'true';
 
+    // Merge query
     const mergeVehiclesQuery = `
       MATCH (v:Vehicle), (c:cars)
-      WHERE ${conditions.length > 0 ? conditions : 'true'}
+      WHERE ${whereClause}
       SET v += {
-            vehicleName: c.vehicleName,
-            model: c.model,
-            fuel: c.fuel,
-            air_pollution_score: c.air_pollution_score,
-            display: c.display,
-            cyl: c.cyl,
-            drive: c.drive,
-            stnd: c.stnd,
-            stnd_description: c.stnd_description,
-            cert_region: c.cert_region,
-            transmission: c.transmission,
-            underhood_id: c.underhood_id,
-            veh_class: c.veh_class,
-            city_mpg: c.city_mpg,
-            hwy_mpg: c.hwy_mpg,
-            cmb_mpg: c.cmb_mpg,
-            greenhouse_gas_score: c.greenhouse_gas_score,
-            smartway: c.smartway,
-            price_eur: c.price_eur
-          }
-      RETURN v.vehicleName AS vehicleName, 
-             v.model AS model,
-             v.fuel AS fuel,
-             v.air_pollution_score AS air_pollution_score,
-             v.display AS display,
-             v.cyl AS cyl,
-             v.drive AS drive,
-             v.stnd AS stnd,
-             v.stnd_description AS stnd_description,
-             v.cert_region AS cert_region,
-             v.transmission AS transmission,
-             v.underhood_id AS underhood_id,
-             v.veh_class AS veh_class,
-             v.city_mpg AS city_mpg,
-             v.hwy_mpg AS hwy_mpg,
-             v.cmb_mpg AS cmb_mpg,
-             v.greenhouse_gas_score AS greenhouse_gas_score,
-             v.smartway AS smartway,
-             v.price_eur AS price_eur;
+        vehicleName: c.vehicleName,
+        model: c.model,
+        fuel: c.fuel,
+        air_pollution_score: c.air_pollution_score,
+        display: c.display,
+        cyl: c.cyl,
+        drive: c.drive,
+        stnd: c.stnd,
+        stnd_description: c.stnd_description,
+        cert_region: c.cert_region,
+        transmission: c.transmission,
+        underhood_id: c.underhood_id,
+        veh_class: c.veh_class,
+        city_mpg: c.city_mpg,
+        hwy_mpg: c.hwy_mpg,
+        cmb_mpg: c.cmb_mpg,
+        greenhouse_gas_score: c.greenhouse_gas_score,
+        smartway: c.smartway,
+        price_eur: c.price_eur
+      }
+      RETURN
+        v.vehicleName AS vehicleName,
+        v.model AS model,
+        v.fuel AS fuel,
+        v.air_pollution_score AS air_pollution_score,
+        v.display AS display,
+        v.cyl AS cyl,
+        v.drive AS drive,
+        v.stnd AS stnd,
+        v.stnd_description AS stnd_description,
+        v.cert_region AS cert_region,
+        v.transmission AS transmission,
+        v.underhood_id AS underhood_id,
+        v.veh_class AS veh_class,
+        v.city_mpg AS city_mpg,
+        v.hwy_mpg AS hwy_mpg,
+        v.cmb_mpg AS cmb_mpg,
+        v.greenhouse_gas_score AS greenhouse_gas_score,
+        v.smartway AS smartway,
+        v.price_eur AS price_eur
     `;
 
     const result = await session.run(mergeVehiclesQuery);
-
-    // Extract results
-    const mergedVehicles = result.records.map((record) => ({
+    const mergedVehicles = result.records.map(record => ({
       vehicleName: record.get('vehicleName'),
       model: record.get('model'),
       fuel: record.get('fuel'),
@@ -280,11 +274,9 @@ async function mergeVehiclesFromNeo4j(filter = {}) {
       smartway: record.get('smartway'),
       price_eur: record.get('price_eur'),
     }));
-
-    // console.log('Merged vehicles:', mergedVehicles);
     return mergedVehicles;
   } catch (error) {
-    console.error('Error merging vehicles:', error);
+    console.error('[ERROR] mergeVehiclesFromNeo4j:', error);
     throw new Error('Failed to merge vehicles.');
   } finally {
     await session.close();
@@ -294,225 +286,215 @@ async function mergeVehiclesFromNeo4j(filter = {}) {
 async function loadVehiclesFromNeo4j() {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
-    const fetchVehiclesQuery = `
+    const query = `
       MATCH (v:Vehicle)
-      RETURN v.vehicleName AS vehicleName, 
-              v.model AS model,
-              v.fuel AS fuel,
-              v.air_pollution_score AS air_pollution_score,
-              v.display AS display,
-              v.cyl AS cyl,
-              v.drive AS drive,
-              v.stnd AS stnd,
-              v.stnd_description AS stnd_description,
-              v.cert_region AS cert_region,
-              v.transmission AS transmission,
-              v.underhood_id AS underhood_id,
-              v.veh_class AS veh_class,
-              v.city_mpg AS city_mpg,
-              v.hwy_mpg AS hwy_mpg,
-              v.cmb_mpg AS cmb_mpg,
-              v.greenhouse_gas_score AS greenhouse_gas_score,
-              v.smartway AS smartway,
-              v.price_eur AS price_eur
+      RETURN v.vehicleName AS vehicleName,
+             v.model AS model,
+             v.fuel AS fuel,
+             v.air_pollution_score AS air_pollution_score,
+             v.display AS display,
+             v.cyl AS cyl,
+             v.drive AS drive,
+             v.stnd AS stnd,
+             v.stnd_description AS stnd_description,
+             v.cert_region AS cert_region,
+             v.transmission AS transmission,
+             v.underhood_id AS underhood_id,
+             v.veh_class AS veh_class,
+             v.city_mpg AS city_mpg,
+             v.hwy_mpg AS hwy_mpg,
+             v.cmb_mpg AS cmb_mpg,
+             v.greenhouse_gas_score AS greenhouse_gas_score,
+             v.smartway AS smartway,
+             v.price_eur AS price_eur
     `;
-
-    const result = await session.run(fetchVehiclesQuery);
-    return result.records.map((record) => ({
+    const result = await session.run(query);
+    if (!result.records.length) {
+      console.warn('[WARN] No vehicles found in DB.');
+    }
+    return result.records.map(record => ({
       vehicleName: record.get('vehicleName'),
       model: record.get('model'),
+      fuel: record.get('fuel'),
+      air_pollution_score: record.get('air_pollution_score'),
+      display: record.get('display'),
+      cyl: record.get('cyl'),
+      drive: record.get('drive'),
+      stnd: record.get('stnd'),
+      stnd_description: record.get('stnd_description'),
       cert_region: record.get('cert_region'),
       transmission: record.get('transmission'),
-      fuel: record.get('fuel'),
-      drive: record.get('drive'),
-      price: record.get('price_eur'),
-      air_pollution_score: record.get('air_pollution_score'),
-      smartway: record.get('smartway'),
-      greenhouse_gas_score: record.get('greenhouse_gas_score'),
+      underhood_id: record.get('underhood_id'),
+      veh_class: record.get('veh_class'),
       city_mpg: record.get('city_mpg'),
       hwy_mpg: record.get('hwy_mpg'),
       cmb_mpg: record.get('cmb_mpg'),
-      display: record.get('display'),
-      stnd: record.get('stnd'),
-      stnd_description: record.get('stnd_description'),
-      veh_class: record.get('veh_class'),
-      underhood_id: record.get('underhood_id'),
-      cyl: record.get('cyl'),
-      
-      
+      greenhouse_gas_score: record.get('greenhouse_gas_score'),
+      smartway: record.get('smartway'),
+      price_eur: record.get('price_eur'),
     }));
   } catch (error) {
-    console.error('Error loading vehicles from Neo4j:', error);
-    throw new Error('Failed to load vehicles from Neo4j.');
+    console.error('[ERROR] loadVehiclesFromNeo4j:', error);
+    throw new Error('Failed to load vehicles.');
   } finally {
     await session.close();
   }
 }
 
-// ----------------------------------------------------------------------------
-// create a router /checkonload that will call the function checkAndPopulateDatabase
-router.get('/checkonload', 
-  async (req, res) => {
-    try {
-      console.log('Checking if the database is empty...');
-      const isEmpty = await isDatabaseEmpty();
-      if (isEmpty) {
-        console.log('Database is empty. Populating...');
-        await populateDatabase();
-        console.log('Database populated successfully.');
-      } else {
-        console.log('Database is not empty. Skipping population.');
-      }
-      res.status(200).json({ message: 'Database check and population completed' });
+// ----------------------------------------------------------
+// /checkonload route -> calls checkAndPopulateDatabase
+// ----------------------------------------------------------
+router.get('/checkonload', async (req, res) => {
+  try {
+    console.log('[INFO] Checking if DB is empty...');
+    const empty = await isDatabaseEmpty();
+    if (empty) {
+      console.log('[INFO] DB empty, populating...');
+      await populateDatabase();
+      console.log('[INFO] DB populated successfully.');
+    } else {
+      console.log('[INFO] DB not empty, skipping populate.');
     }
-    catch (error) {
-      console.error('Error during database check and population:', error);
-      res.status(500).send('Internal server error during database initialization.');
-    }
+    res.status(200).json({ message: 'Database check + population done.' });
+  } catch (error) {
+    console.error('[ERROR] During DB check/populate:', error);
+    res.status(500).send('Internal server error during DB initialization.');
   }
-);
+});
 
-// ----------------------------------------------------------------------------
-// 1) Example route: loadNodes
+// ----------------------------------------------------------
+// 1) /loadNodes example
+// ----------------------------------------------------------
 router.get('/loadNodes', async (req, res) => {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
-    const fetchNodesQuery = `
+    const query = `
       MATCH (n:cars)
-      RETURN  n.vehicleName AS vehicleName, 
-              n.model AS model,
-              n.fuel AS fuel,
-              n.air_pollution_score AS air_pollution_score,
-              n.display AS display,
-              n.cyl AS cyl,
-              n.drive AS drive,
-              n.stnd AS stnd,
-              n.stnd_description AS stnd_description,
-              n.cert_region as cert_region,
-              n.transmission AS transmission,
-              n.underhood_id AS underhood_id,
-              n.veh_class AS veh_class,
-              n.city_mpg AS city_mpg,
-              n.hwy_mpg AS hwy_mpg,
-              n.cmb_mpg AS cmb_mpg,
-              n.greenhouse_gas_score AS greenhouse_gas_score,
-              n.smartway AS smartway,
-              n.price_eur AS price_eur
-        
+      RETURN n.vehicleName AS vehicleName,
+             n.model AS model,
+             n.fuel AS fuel,
+             n.air_pollution_score AS air_pollution_score,
+             n.display AS display,
+             n.cyl AS cyl,
+             n.drive AS drive,
+             n.stnd AS stnd,
+             n.stnd_description AS stnd_description,
+             n.cert_region AS cert_region,
+             n.transmission AS transmission,
+             n.underhood_id AS underhood_id,
+             n.veh_class AS veh_class,
+             n.city_mpg AS city_mpg,
+             n.hwy_mpg AS hwy_mpg,
+             n.cmb_mpg AS cmb_mpg,
+             n.greenhouse_gas_score AS greenhouse_gas_score,
+             n.smartway AS smartway,
+             n.price_eur AS price_eur
     `;
-    const result = await session.run(fetchNodesQuery);
-    const nodes = result.records.map((record) => ({
-      vehicleName: record.get('vehicleName'),
-      model: record.get('model'),
-      cert_region: record.get('cert_region'),
-      transmission: record.get('transmission'),
-      fuel: record.get('fuel'),
-      drive: record.get('drive'),
-      price: record.get('price_eur'),
-      air_pollution_score: record.get('air_pollution_score'),
-      smartway: record.get('smartway'),
-      greenhouse_gas_score: record.get('greenhouse_gas_score'),
-      city_mpg: record.get('city_mpg'),
-      hwy_mpg: record.get('hwy_mpg'),
-      cmb_mpg: record.get('cmb_mpg'),
-      display: record.get('display'),
-      stnd: record.get('stnd'),
-      stnd_description: record.get('stnd_description'),
-      veh_class: record.get('veh_class'),
-      underhood_id: record.get('underhood_id'),
-      cyl: record.get('cyl'),
+    const result = await session.run(query);
+    const nodes = result.records.map(rec => ({
+      vehicleName: rec.get('vehicleName'),
+      model: rec.get('model'),
+      cert_region: rec.get('cert_region'),
+      transmission: rec.get('transmission'),
+      fuel: rec.get('fuel'),
+      drive: rec.get('drive'),
+      price: rec.get('price_eur'),
+      air_pollution_score: rec.get('air_pollution_score'),
+      smartway: rec.get('smartway'),
+      greenhouse_gas_score: rec.get('greenhouse_gas_score'),
+      city_mpg: rec.get('city_mpg'),
+      hwy_mpg: rec.get('hwy_mpg'),
+      cmb_mpg: rec.get('cmb_mpg'),
+      display: rec.get('display'),
+      stnd: rec.get('stnd'),
+      stnd_description: rec.get('stnd_description'),
+      veh_class: rec.get('veh_class'),
+      underhood_id: rec.get('underhood_id'),
+      cyl: rec.get('cyl'),
     }));
-    // console.log('--> #nodes:', nodes.length);
     res.json(nodes);
   } catch (error) {
-    console.error('Error fetching nodes:', error);
+    console.error('[ERROR] /loadNodes:', error);
     res.status(500).send('Failed to load nodes.');
   } finally {
-    await session.close();
+    session.close();
   }
 });
-router.get('/populateVehiclesFromCars', async(req, res) => {
-  const session = driver.session({ database: config.neo4jDatabase });
+
+router.get('/populateVehiclesFromCars', async (req, res) => {
   try {
-    const veh = await loadVehiclesFromNeo4j();
-    res.json(veh);
-    // get the cars abd filter the cars that have only the properties of the vehicles above
-
-
-   
-    // console.log('--> #vehicles:', vehicles.length);
+    const vehicles = await loadVehiclesFromNeo4j();
     res.json(vehicles);
-
   } catch (error) {
-    console.error('Error fetching vehicles:', error);
+    console.error('[ERROR] /populateVehiclesFromCars:', error);
     res.status(500).send('Failed to load vehicles.');
-  } finally {
-    await session.close();
-  } 
-})
+  }
+});
 
-
-// 2) Example route: loadVehicles
+// ----------------------------------------------------------
+// 2) /loadVehicles example
+// ----------------------------------------------------------
 router.get('/loadVehicles', async (req, res) => {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
-    const fetchVehiclesQuery = `
+    const query = `
       MATCH (n:cars)
-      RETURN v.vehicleName AS vehicleName, 
-              v.model AS model,
-              v.fuel AS fuel,
-              v.air_pollution_score AS air_pollution_score,
-              v.display AS display,
-              v.cyl AS cyl,
-              v.drive AS drive,
-              v.stnd AS stnd,
-              v.stnd_description AS stnd_description,
-              v.cert_region AS cert_region,
-              v.transmission AS transmission,
-              v.underhood_id AS underhood_id,
-              v.veh_class AS veh_class,
-              v.city_mpg AS city_mpg,
-              v.hwy_mpg AS hwy_mpg,
-              v.cmb_mpg AS cmb_mpg,
-              v.greenhouse_gas_score AS greenhouse_gas_score,
-              v.smartway AS smartway,
-              v.price_eur AS price_eur
+      RETURN n.vehicleName AS vehicleName,
+             n.model AS model,
+             n.fuel AS fuel,
+             n.air_pollution_score AS air_pollution_score,
+             n.display AS display,
+             n.cyl AS cyl,
+             n.drive AS drive,
+             n.stnd AS stnd,
+             n.stnd_description AS stnd_description,
+             n.cert_region AS cert_region,
+             n.transmission AS transmission,
+             n.underhood_id AS underhood_id,
+             n.veh_class AS veh_class,
+             n.city_mpg AS city_mpg,
+             n.hwy_mpg AS hwy_mpg,
+             n.cmb_mpg AS cmb_mpg,
+             n.greenhouse_gas_score AS greenhouse_gas_score,
+             n.smartway AS smartway,
+             n.price_eur AS price_eur
     `;
-    const result = await session.run(fetchVehiclesQuery);
-    const vehicles = result.records.map((record) => ({
-      vehicleName: record.get('vehicleName'),
-      model: record.get('model'),
-      transmission: record.get('transmission'),
-      cert_region: record.get('cerd_region'),
-      fuel: record.get('fuel'),
-      drive: record.get('drive'),
-      price: record.get('price_eur'),
-      air_pollution_score: record.get('air_pollution_score'),
-      smartway: record.get('smartway'),
-      greenhouse_gas_score: record.get('greenhouse_gas_score'),
-      city_mpg: record.get('city_mpg'),
-      hwy_mpg: record.get('hwy_mpg'),
-      cmb_mpg: record.get('cmb_mpg'),
-      display: record.get('display'),
-      stnd: record.get('stnd'),
-      stnd_description: record.get('stnd_description'),
-      veh_class: record.get('veh_class'),
-      underhood_id: record.get('underhood_id'),
-      cyl: record.get('cyl'),
+    const result = await session.run(query);
+    const vehicles = result.records.map(rec => ({
+      vehicleName: rec.get('vehicleName'),
+      model: rec.get('model'),
+      transmission: rec.get('transmission'),
+      cert_region: rec.get('cert_region'), // correct key
+      fuel: rec.get('fuel'),
+      drive: rec.get('drive'),
+      price: rec.get('price_eur'),
+      air_pollution_score: rec.get('air_pollution_score'),
+      smartway: rec.get('smartway'),
+      greenhouse_gas_score: rec.get('greenhouse_gas_score'),
+      city_mpg: rec.get('city_mpg'),
+      hwy_mpg: rec.get('hwy_mpg'),
+      cmb_mpg: rec.get('cmb_mpg'),
+      display: rec.get('display'),
+      stnd: rec.get('stnd'),
+      stnd_description: rec.get('stnd_description'),
+      veh_class: rec.get('veh_class'),
+      underhood_id: rec.get('underhood_id'),
+      cyl: rec.get('cyl'),
     }));
     res.json(vehicles);
   } catch (error) {
-    console.error('Error fetching vehicles:', error);
+    console.error('[ERROR] /loadVehicles:', error);
     res.status(500).send('Failed to load vehicles.');
   } finally {
-    await session.close();
+    session.close();
   }
 });
 
-// 3) Example route: getOurRoutes (OpenRouteService with alternatives)
+// ----------------------------------------------------------
+// 3) /getOurRoutes -> OpenRouteService
+// ----------------------------------------------------------
 router.post('/getOurRoutes', async (req, res) => {
   const { locations, car } = req.body;
-
   if (!locations || locations.length < 2) {
     return res.status(400).send('At least two locations are required.');
   }
@@ -541,37 +523,38 @@ router.post('/getOurRoutes', async (req, res) => {
 
   try {
     const orsResponse = await new Promise((resolve, reject) => {
-      const request = https.request(options, (response) => {
+      const request = https.request(options, response => {
         let responseData = '';
-        response.on('data', (chunk) => {
-          responseData += chunk;
-        });
+        response.on('data', chunk => (responseData += chunk));
         response.on('end', () => {
           if (response.statusCode >= 200 && response.statusCode < 300) {
             try {
-              resolve(JSON.parse(responseData));
+              const json = JSON.parse(responseData);
+              resolve(json);
             } catch (err) {
               reject(new Error('Failed to parse ORS response'));
             }
           } else {
-            reject(new Error(`ORS request failed: ${response.statusCode} - ${responseData}`));
+            reject(
+              new Error(
+                `ORS request failed: ${response.statusCode} - ${responseData}`
+              )
+            );
           }
         });
       });
-      request.on('error', (err) => reject(err));
+      request.on('error', err => reject(err));
       request.write(payload);
       request.end();
     });
 
     const { routes } = orsResponse;
     const analyzedRoutes = await Promise.all(
-      routes.map(async (route, index) => {
+      routes.map((route, index) => {
         const decoded = polylineLib.decode(route.geometry);
-        // If you want elevation data, see your code logic...
-        const totalStops = route.way_points.length - 2; // Excluding start/end
-        const tollwayDistance = 0; // Your logic for tollway
+        const totalStops = route.way_points.length - 2;
+        const tollwayDistance = 0;
         const elevationChanges = { totalElevationGain: 0, totalElevationLoss: 0 };
-
         return {
           routeIndex: index,
           distance: route.summary.distance,
@@ -580,8 +563,8 @@ router.post('/getOurRoutes', async (req, res) => {
           totalStops,
           elevationChanges,
           geometry: route.geometry,
-          instructions: route.segments.flatMap((segment) =>
-            segment.steps.map((step) => ({
+          instructions: route.segments.flatMap(seg =>
+            seg.steps.map(step => ({
               instruction: step.instruction,
               distance: step.distance,
               duration: step.duration,
@@ -593,37 +576,31 @@ router.post('/getOurRoutes', async (req, res) => {
 
     res.json({ routes: analyzedRoutes });
   } catch (error) {
-    console.error('Error fetching ORS routes:', error.message);
+    console.error('[ERROR] /getOurRoutes:', error.message);
     res.status(500).send('Failed to fetch routes with alternatives.');
   }
 });
 
- async function fetchAndAnalyzeRoutes(locations, config) {
-  // Must have at least 2 waypoints (start/end)
+// Helper for analyzing routes (if you want it separately)
+async function fetchAndAnalyzeRoutes(locations, configObj) {
   if (!locations || locations.length < 2) {
     throw new Error('At least two locations are required.');
   }
 
-  // Build the payload object
   let payloadObj = {
     coordinates: locations,
     format: 'json',
-    instructions: true
+    instructions: true,
   };
-
-  // ORS only allows alternative_routes if exactly 2 waypoints
   if (locations.length === 2) {
     payloadObj.alternative_routes = {
       target_count: 10,
       share_factor: 0.6,
-      weight_factor: 1.2
+      weight_factor: 1.2,
     };
   }
-
-  // Convert payload to a JSON string
   const payload = JSON.stringify(payloadObj);
 
-  // Set up the request
   const options = {
     hostname: 'api.openrouteservice.org',
     path: '/v2/directions/driving-car',
@@ -631,113 +608,97 @@ router.post('/getOurRoutes', async (req, res) => {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Content-Length': Buffer.byteLength(payload),
-      Authorization: config.ORS_Key 
-    }
+      Authorization: configObj.ORS_Key,
+    },
   };
 
   try {
-    // Make the HTTPS request to ORS
     const orsResponse = await new Promise((resolve, reject) => {
-      const request = https.request(options, (response) => {
+      const request = https.request(options, response => {
         let responseData = '';
-        
-        response.on('data', (chunk) => {
-          responseData += chunk;
-        });
-        
+        response.on('data', chunk => (responseData += chunk));
         response.on('end', () => {
           if (response.statusCode >= 200 && response.statusCode < 300) {
             try {
-              const parsed = JSON.parse(responseData);
-              resolve(parsed);
+              const json = JSON.parse(responseData);
+              resolve(json);
             } catch (err) {
               reject(new Error('Failed to parse ORS response JSON'));
             }
           } else {
-            reject(new Error(`ORS request failed: HTTP ${response.statusCode} - ${responseData}`));
+            reject(
+              new Error(
+                `ORS request failed: HTTP ${response.statusCode} - ${responseData}`
+              )
+            );
           }
         });
       });
-
-      request.on('error', (err) => {
-        reject(err);
-      });
-
-      // Send the body
+      request.on('error', err => reject(err));
       request.write(payload);
       request.end();
     });
 
-    // Extract routes from ORS response
     const { routes } = orsResponse;
+    const analyzed = routes.map((route, index) => {
+      // decode polyline if needed
+      const decoded = polylineLib.decode(route.geometry);
+      // metrics
+      const totalStops = (route.way_points?.length || 2) - 2;
+      const tollwayDistance = 0;
+      const elevationChanges = { totalElevationGain: 0, totalElevationLoss: 0 };
 
-    // Analyze each route
-    const analyzedRoutes = await Promise.all(
-      routes.map(async (route, index) => {
-        // decode the polyline if you need the list of lat/lon points
-        const decoded = polylineLib.decode(route.geometry);
-
-        // Example metrics:
-        const totalStops = (route.way_points?.length || 2) - 2; // Excluding start & end
-        const tollwayDistance = 0;  // or your logic for "tollway" segments
-        const elevationChanges = { totalElevationGain: 0, totalElevationLoss: 0 }; // optional
-
-        return {
-          routeIndex: index,
-          distance: route.summary.distance,    // meters
-          duration: route.summary.duration,    // seconds
-          geometry: route.geometry,            // encoded polyline
-          instructions: route.segments.flatMap((seg) =>
-            seg.steps.map((step) => ({
-              instruction: step.instruction,
-              distance: step.distance,
-              duration: step.duration
-            }))
-          ),
-          totalStops,
-          tollwayDistance,
-          elevationChanges
-        };
-      })
-    );
-
-    return analyzedRoutes;
+      return {
+        routeIndex: index,
+        distance: route.summary.distance,
+        duration: route.summary.duration,
+        geometry: route.geometry,
+        instructions: route.segments.flatMap(seg =>
+          seg.steps.map(step => ({
+            instruction: step.instruction,
+            distance: step.distance,
+            duration: step.duration,
+          }))
+        ),
+        totalStops,
+        tollwayDistance,
+        elevationChanges,
+      };
+    });
+    return analyzed;
   } catch (error) {
-    console.error('Error fetching ORS routes:', error.message);
+    console.error('[ERROR] fetchAndAnalyzeRoutes:', error.message);
     throw new Error('Failed to fetch routes with alternatives.');
   }
 }
 
-
-
-// 4) Example route: getRoutes (loading relationships from Neo4j)
+// ----------------------------------------------------------
+// 4) /getRoutes - relationships
+// ----------------------------------------------------------
 router.get('/getRoutes', async (req, res) => {
-  // Example query: adjust to your actual relationships
   const retrieveAllNodeRelationships = `
     MATCH (a:Node)-[r]->(b:Node)
     RETURN a AS a, b AS b, type(r) AS relType
   `;
-
   const session = driver.session({ database: config.neo4jDatabase });
   try {
-    // Load all nodes first if you want names:
+    // If you want node details
     const fetchNodeNamesQuery = `
       MATCH (n:Node)
       RETURN n.name AS name, n.latitude AS latitude, n.longitude AS longitude
     `;
     const nodeResult = await session.run(fetchNodeNamesQuery);
-    const nodeNames = nodeResult.records.map((rec) => ({
+    const nodeNames = nodeResult.records.map(rec => ({
       name: rec.get('name'),
       latitude: rec.get('latitude'),
       longitude: rec.get('longitude'),
     }));
 
-    // Then load relationships
     const relResult = await session.run(retrieveAllNodeRelationships);
-    const relationships = relResult.records.map((record) => {
+    const relationships = relResult.records.map(record => {
       const a = record.get('a');
       const b = record.get('b');
-      const relationshipType = record.get('relType');
+      const relType = record.get('relType');
       return {
         nodeA: {
           name: a.properties.name,
@@ -751,99 +712,142 @@ router.get('/getRoutes', async (req, res) => {
           latitude: b.properties.latitude,
           longitude: b.properties.longitude,
         },
-        relationshipType,
+        relationshipType: relType,
       };
     });
-
-    // If you have a simplifyRouteData, call it here...
     res.json(relationships);
   } catch (error) {
-    console.error('Error loading node relationships:', error);
+    console.error('[ERROR] /getRoutes:', error);
     res.status(500).send('Failed to load relationships.');
   } finally {
-    await session.close();
+    session.close();
   }
 });
 
-// 5) Example route: build an ASP rules string from DB stops & vehicles
+// ----------------------------------------------------------
+// 5) /retrieveASPrules - Build ASP facts
+// ----------------------------------------------------------
 router.get('/retrieveASPrules', async (req, res) => {
   try {
+    // Build 'filter' from query or body
+    const filter = req.body.filter || {};
+    for (const [key, val] of Object.entries(req.query)) {
+      const numVal = Number(val);
+      filter[key] = isNaN(numVal) ? val : numVal;
+    }
 
+    // 1) Load data
     const nodes = await loadStopsFromNeo4j();
-    const vehicles = await mergeVehiclesFromNeo4j();
-    // const vehicles = await populateVehiclesFromCars();
-    // console.log('Loaded:', vehicles);
-    let aspFacts = '';
-    const processedNodes = new Set();
+    const vehicles = await mergeVehiclesFromNeo4j(filter);
 
-    const addStringFact = (predicate, ...args) => {
-      aspFacts += `${predicate}(${args.map((arg) => `"${arg}"`).join(', ')}).
+    // 2) Build base ASP facts
+    let aspFacts = `
+% ------------------------------------------------------
+% Score Weights & Penalties
+weight_duration(2).
+weight_distance(1).
+penalty_air_pollution(-1).
+bonus_smartway_elite(10).
+
+% ------------------------------------------------------
+% Node & Vehicle definitions
+node(X) :- latitude(X, _), longitude(X, _).
+vehicle(X) :-
+    transmission(X, _), fuel(X, _), air_pollution_score(X, _), display(X, _),
+    cyl(X, _), drive(X, _), stnd(X, _), stnd_description(X, _),
+    cert_region(X, _), underhood_id(X, _), veh_class(X, _),
+    city_mpg(X, _), hwy_mpg(X, _), cmb_mpg(X, _),
+    greenhouse_gas_score(X, _), smartway(X, _), price_eur(X, _).
+
+friendly_environment(X) :- vehicle(X), air_pollution_score(X, Score), Score <= 7.
+
+vehicle_score(V, Total) :-
+    vehicle(V),
+    air_pollution_score(V, APS),
+    city_mpg(V, CMPG),
+    hwy_mpg(V, HMPG),
+    cmb_mpg(V, CBMPG),
+    greenhouse_gas_score(V, GGS),
+    smartway(V, S),
+    penalty_air_pollution(PAP),
+    bonus_smartway_elite(Bonus),
+    BonusAmount = Bonus * (S = "ELITE"),
+    Total = APS * PAP + CMPG + HMPG + CBMPG - GGS + BonusAmount.
+
+max_vehicle_score(Max) :- Max = #max { Total : vehicle_score(_, Total)}.
+best_vehicle(V) :- vehicle_score(V, Total), max_vehicle_score(Total).
+
+route_score(R, Total) :-
+    route(R),
+    distance(R, D),
+    time(R, T),
+    weight_duration(WD),
+    weight_distance(WDist),
+    Total = WD * T + WDist * D.
+
+min_route_score(Min) :- Min = #min { Total : route_score(_, Total)}.
+best_route(R) :- route_score(R, Total), min_route_score(Total).
+% ------------------------------------------------------
 `;
+
+    // Helper functions for facts
+    const addStringFact = (pred, ...args) => {
+      aspFacts += `${pred}(${args.map(a => `"${a}"`).join(', ')}).\n`;
+    };
+    const addNumericFact = (pred, ...args) => {
+      aspFacts += `${pred}(${args.join(', ')}).\n`;
+    };
+    const addRule = (head, body) => {
+      aspFacts += `${head} :- ${body.join(', ')}.\n`;
     };
 
-    const addNumericFact = (predicate, ...args) => {
-      aspFacts += `${predicate}(${args.join(', ')}).
-`;
-    };
+    // 3) Generate route facts from ORS
+    const configObj = { ORS_Key: config.ORS_Key };
+    const locations = nodes.map(n => [n.longitude, n.latitude]);
+    const routes = await fetchAndAnalyzeRoutes(locations, configObj);
 
-    const addRule = (head, bodyConditions) => {
-      aspFacts += `${head} :- ${bodyConditions.join(', ')}.
-`;
-    };
-
-    const locations = nodes.map((node) => [node.longitude, node.latitude]);
-    const config1 = { ORS_Key: config.ORS_Key };
-    const routes = await fetchAndAnalyzeRoutes(locations, config1);
-    
-    routes.forEach((route, index) => {
-      const routeId = `r${index + 1}`;
+    routes.forEach((route, idx) => {
+      const routeId = `r${idx + 1}`;
       addNumericFact('route', routeId);
       addNumericFact('distance', routeId, route.distance);
       addNumericFact('time', routeId, route.duration);
-       const score = 2 * route.duration + route.distance;
-      addRule(`route_score(${routeId}, ${score})`, [
-      `route(${routeId})`,
-      `distance(${routeId}, ${route.distance})`,
-      `time(${routeId}, ${route.duration})`,
+      const routeScore = 2 * route.duration + route.distance; // or your logic
+      addRule(`route_score(${routeId}, ${routeScore})`, [
+        `route(${routeId})`,
+        `distance(${routeId}, ${route.distance})`,
+        `time(${routeId}, ${route.duration})`,
       ]);
-    })
+    });
 
-    // (a) node(...)
-    let k=0;
-  nodes.forEach((node) => {
-    // Thoroughly remove invalid punctuation
+    // 4) node(...) facts
+    const processedNodes = new Set();
+    let nodeIndex = 0;
 
-    let nodeName = transliterate(node.name || k++)
-      .toLowerCase()
-      .replace(/[^a-z0-9_]+/g, '')
-      + '_' + k;
+    nodes.forEach(node => {
+      let nodeName = transliterate(node.name || nodeIndex++)
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, '')
+        + '_' + nodeIndex;
 
-    if (!nodeName.match(/^[a-z]/)) {
-      nodeName = 'node_' + nodeName; // Prefix if it doesn't start with a letter
-    }
+      if (!nodeName.match(/^[a-z]/)) {
+        nodeName = 'node_' + nodeName;
+      }
+      if (!processedNodes.has(nodeName)) {
+        processedNodes.add(nodeName);
+      }
 
-    if (!processedNodes.has(nodeName)) {
-      processedNodes.add(nodeName);
-    }
+      addStringFact('node', nodeName);
+      addStringFact('latitude', nodeName, node.latitude);
+      addStringFact('longitude', nodeName, node.longitude);
+      if (node.demand) {
+        addNumericFact('demand', nodeName, node.demand);
+      }
+    });
 
-    // Convert latitude and longitude to strings
-    const latitude = `"${node.latitude}"`;
-    const longitude = `"${node.longitude}"`;
-
-    // Generate ASP facts
-    addStringFact('node', nodeName);
-    addStringFact('latitude', nodeName, node.latitude);
-    addStringFact('longitude', nodeName, node.longitude);
-    if (node.demand) {
-      addNumericFact('demand', nodeName, node.demand);
-    }
-});
-
-
-    // (b) vehicle(...)
-    let i=0;
-    vehicles.forEach((v) => {
-      let vehicleID = transliterate(String(v.vehicleID || i++))
+    // 5) vehicle(...) facts
+    let vehicleIndex = 0;
+    vehicles.forEach(v => {
+      let vehicleID = transliterate(String(v.vehicleID || vehicleIndex++))
         .toLowerCase()
         .replace(/[^a-z0-9_]+/g, '');
       if (!vehicleID.match(/^[a-z]/)) {
@@ -851,7 +855,6 @@ router.get('/retrieveASPrules', async (req, res) => {
       }
       addStringFact('vehicle', vehicleID);
       if (v.fuel) addStringFact('fuel', vehicleID, v.fuel);
-
       if (v.air_pollution_score) addNumericFact('air_pollution_score', vehicleID, v.air_pollution_score);
       if (v.transmission) addStringFact('transmission', vehicleID, v.transmission);
       if (v.underhood_id) addStringFact('underhood_id', vehicleID, v.underhood_id);
@@ -869,69 +872,55 @@ router.get('/retrieveASPrules', async (req, res) => {
       if (v.stnd_description) addStringFact('stnd_description', vehicleID, v.stnd_description);
       if (v.cert_region) addStringFact('cert_region', vehicleID, v.cert_region);
 
-      
-      
-      // if (v.smartway) {
-        const isElite = v.smartway === "ELITE" ? 10 : 0; // Convert ELITE to numeric bonus
-        const aps = Number(v.air_pollution_score || 0);
-        const cityMpg = Number(v.city_mpg || 0);
-        const hwyMpg = Number(v.hwy_mpg || 0);
-        const cmbMpg = Number(v.cmb_mpg || 0);
-        const ggs = Number(v.greenhouse_gas_score || 0);
+      // Additional scoring logic
+      const isElite = v.smartway === 'ELITE' ? 10 : 0;
+      const aps = Number(v.air_pollution_score || 0);
+      const cityMpg = Number(v.city_mpg || 0);
+      const hwyMpg = Number(v.hwy_mpg || 0);
+      const cmbMpg = Number(v.cmb_mpg || 0);
+      const ggs = Number(v.greenhouse_gas_score || 0);
+      const total = -aps + cityMpg + hwyMpg + cmbMpg - ggs + isElite;
 
-        const total = -aps + cityMpg + hwyMpg + cmbMpg - ggs + isElite;
+      addRule(`vehicle_score(${vehicleID}, ${total})`, [
+        `vehicle(${vehicleID})`,
+        `air_pollution_score(${vehicleID}, ${aps})`,
+        `city_mpg(${vehicleID}, ${cityMpg})`,
+        `hwy_mpg(${vehicleID}, ${hwyMpg})`,
+        `cmb_mpg(${vehicleID}, ${cmbMpg})`,
+        `greenhouse_gas_score(${vehicleID}, ${ggs})`,
+      ]);
 
-        addRule(
-          `vehicle_score(${vehicleID}, ${total})`,
-          [
-            `vehicle(${vehicleID})`,
-            `air_pollution_score(${vehicleID}, ${aps})`,
-            `city_mpg(${vehicleID}, ${cityMpg})`,
-            `hwy_mpg(${vehicleID}, ${hwyMpg})`,
-            `cmb_mpg(${vehicleID}, ${cmbMpg})`,
-            `greenhouse_gas_score(${vehicleID}, ${ggs})`,
-          ]
-        );
-
-        if (v.air_pollution_score && aps <= 7) {
-          addRule(
-            `friendly_environment(${vehicleID})`,
-            [`vehicle(${vehicleID})`, `air_pollution_score(${vehicleID}, ${aps})`, `${aps} <= 7`]
-          );
-        }
-      // }
-
-
+      // friendly_environment
+      if (v.air_pollution_score && aps <= 7) {
+        addRule(`friendly_environment(${vehicleID})`, [
+          `vehicle(${vehicleID})`,
+          `air_pollution_score(${vehicleID}, ${aps})`,
+          `${aps} <= 7`,
+        ]);
+      }
     });
 
-    // (c) distance(A,B,C) via Haversine
+    // 6) distance(A,B,D)
     const allDistances = computeAllDistances(nodes);
-    allDistances.forEach((dist) => {
-      let fromName = transliterate(dist.from || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9_]+/g, '');
-      if (!fromName.match(/^[a-z]/)) {
-        fromName = 'unknown';
-      }
-
-      let toName = transliterate(dist.to || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9_]+/g, '');
-      if (!toName.match(/^[a-z]/)) {
-        toName = 'unknown';
-      }
+    allDistances.forEach(dist => {
+      let fromName = transliterate(dist.from || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
+      if (!fromName.match(/^[a-z]/)) fromName = 'unknown';
+      let toName = transliterate(dist.to || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
+      if (!toName.match(/^[a-z]/)) toName = 'unknown';
 
       addNumericFact('distance', fromName, toName, dist.distance);
     });
 
+    // 7) Return ASP facts
     return res.type('text/plain').send(aspFacts);
-  } catch (err) {
-    console.error('Error building ASP facts:', err);
+  } catch (error) {
+    console.error('[ERROR] /retrieveASPrules:', error);
     res.status(500).send('Error building ASP facts');
   }
 });
 
-// 6) run the python script (Clingo)
+// ----------------------------------------------------------
+// 6) runPythonScript (Clingo)
 router.get('/runPythonScript', (req, res) => {
   try {
     const scriptPath = path.join(__dirname, 'clingoFiles', 'nemoClingoRouting.py');
@@ -943,77 +932,79 @@ router.get('/runPythonScript', (req, res) => {
       { timeout: 70000 },
       (err, stdout, stderr) => {
         if (err) {
-          console.error('Clingo execution error:', err);
+          console.error('[ERROR] Clingo execution:', err);
           if (err.killed) {
             return res.status(504).send('Clingo script timed out.');
           }
           return res.status(500).send(err.message);
         }
         if (stderr) {
-          console.error('Stderr from python script:', stderr);
+          console.error('[WARN] Stderr from python script:', stderr);
         }
-        // console.log('Python script output:', stdout);
-
-        // If your script prints JSON, parse it:
         let routeData;
         try {
           routeData = JSON.parse(stdout);
         } catch (parseError) {
-          console.error('Could not parse JSON from stdout. Falling back...');
+          console.error('[ERROR] Could not parse JSON from stdout. Fallback...');
           routeData = [];
         }
-
         res.json({ routeData });
       }
     );
   } catch (error) {
-    console.error('Error in /runPythonScript:', error);
+    console.error('[ERROR] in /runPythonScript:', error);
     res.status(500).send('Error in runPythonScript');
   }
 });
 
-// 7) stop the python script
+// ----------------------------------------------------------
+// 7) stopPythonScript
+// ----------------------------------------------------------
 router.get('/stopPythonScript', (req, res) => {
   if (childProcess) {
     processStoppedByUser = true;
     childProcess.kill('SIGINT');
-    // console.log('Child process to retrieve CLINGO results stopped.');
     res.send('Clingo retrieval process stopped');
   } else {
     res.status(404).send('No process is running');
   }
 });
 
-// 8) delete all nodes
+// ----------------------------------------------------------
+// 8) deleteAllNodes
+// ----------------------------------------------------------
 router.delete('/deleteAllNodes', async (req, res) => {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
     await session.run('MATCH (n) DETACH DELETE n');
     res.status(200).json({ message: 'All nodes deleted successfully' });
   } catch (error) {
-    console.error('Error deleting nodes:', error);
+    console.error('[ERROR] /deleteAllNodes:', error);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
-    await session.close();
+    session.close();
   }
 });
 
-// 9) delete all vehicles
+// ----------------------------------------------------------
+// 9) deleteAllVehicles
+// ----------------------------------------------------------
 router.delete('/deleteAllVehicles', async (req, res) => {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
     await session.run('MATCH (v:Vehicle) DETACH DELETE v');
     res.status(200).json({ message: 'All vehicles deleted successfully' });
   } catch (error) {
-    console.error('Error deleting vehicles:', error);
+    console.error('[ERROR] /deleteAllVehicles:', error);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
-    await session.close();
+    session.close();
   }
 });
 
-// ----------------------------------------------------------------------------
+// ----------------------------------------------------------
 // Start server
+// ----------------------------------------------------------
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });

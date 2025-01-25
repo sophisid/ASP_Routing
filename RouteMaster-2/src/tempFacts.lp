@@ -1,18 +1,79 @@
 route(r1).
-distance(r1, 7251.4).
-time(r1, 728.2).
-route_score(r1, 8707.8) :- route(r1), distance(r1, 7251.4), time(r1, 728.2).
-node("sss_0").
-latitude("sss_0", "35.3385277").
-longitude("sss_0", "25.1590327").
-demand(sss_0, 2).
-node("ssssss_0").
-latitude("ssssss_0", "35.3369718").
-longitude("ssssss_0", "25.1721661").
-demand(ssssss_0, 2).
-node("ssssss_0").
-latitude("ssssss_0", "35.33052713209946").
-longitude("ssssss_0", "25.17209792559572").
+distance(r1, 1429.7).
+time(r1, 134.3).
+route_score(r1, 1698.3000000000002) :- route(r1), distance(r1, 1429.7), time(r1, 134.3).
+node("ss_0").
+latitude("ss_0", "35.3377197").
+longitude("ss_0", "25.1627474").
+demand(ss_0, 2).
+node("ss33_0").
+latitude("ss33_0", "35.3376482").
+longitude("ss33_0", "25.1634345").
+demand(ss33_0, 2).
+node("ss3333_0").
+latitude("ss3333_0", "35.337539").
+longitude("ss3333_0", "25.1640211").
+demand(ss3333_0, 2).
+node("sophiasideri2222_0").
+latitude("sophiasideri2222_0", "35.3379446").
+longitude("sophiasideri2222_0", "25.1642872").
+demand(sophiasideri2222_0, 1).
+node("dddsophiasideri2222_0").
+latitude("dddsophiasideri2222_0", "35.337539").
+longitude("dddsophiasideri2222_0", "25.1640211").
+demand(dddsophiasideri2222_0, 1).
+node("dddsophiasideri2222_0").
+latitude("dddsophiasideri2222_0", "35.3377197").
+longitude("dddsophiasideri2222_0", "25.1627474").
+demand(dddsophiasideri2222_0, 1).
+node("dddsophiasideri2222_0").
+latitude("dddsophiasideri2222_0", "35.3376482").
+longitude("dddsophiasideri2222_0", "25.1634345").
+demand(dddsophiasideri2222_0, 1).
+node("dddsophiasideri_0").
+latitude("dddsophiasideri_0", "35.3374547").
+longitude("dddsophiasideri_0", "25.1640397").
+demand(dddsophiasideri_0, 1).
+node("dddsophiaside_0").
+latitude("dddsophiaside_0", "35.337402").
+longitude("dddsophiaside_0", "25.1649953").
+demand(dddsophiaside_0, 1).
+node("dddd_0").
+latitude("dddd_0", "35.3378653").
+longitude("dddd_0", "25.1631584").
+demand(dddd_0, 1).
+node("ddddffff_0").
+latitude("ddddffff_0", "35.3376482").
+longitude("ddddffff_0", "25.1634345").
+demand(ddddffff_0, 2).
+node("ddddffffggg_0").
+latitude("ddddffffggg_0", "35.3373944").
+longitude("ddddffffggg_0", "25.1644349").
+demand(ddddffffggg_0, 2).
+node("sophiasideri222_0").
+latitude("sophiasideri222_0", "35.3376482").
+longitude("sophiasideri222_0", "25.1634345").
+demand(sophiasideri222_0, 2).
+node("sophiasideri222_0").
+latitude("sophiasideri222_0", "35.337539").
+longitude("sophiasideri222_0", "25.1640211").
+demand(sophiasideri222_0, 2).
+node("sophiasideri222_0").
+latitude("sophiasideri222_0", "35.3373944").
+longitude("sophiasideri222_0", "25.1644349").
+demand(sophiasideri222_0, 2).
+node("ddd_0").
+latitude("ddd_0", "35.3376824").
+longitude("ddd_0", "25.1628896").
+demand(ddd_0, 2).
+node("dddss_0").
+latitude("dddss_0", "35.337539").
+longitude("dddss_0", "25.1640211").
+demand(dddss_0, 2).
+node("ssdddss_0").
+latitude("ssdddss_0", "35.3374308").
+longitude("ssdddss_0", "25.1647459").
+demand(ssdddss_0, 2).
 vehicle("vehicle_0").
 fuel("vehicle_0", "Gasoline").
 air_pollution_score(vehicle_0, 7).
@@ -3813,9 +3874,309 @@ stnd_description("vehicle_199", "California LEV-II ULEV").
 cert_region("vehicle_199", "CA").
 vehicle_score(vehicle_199, 61) :- vehicle(vehicle_199), air_pollution_score(vehicle_199, 7), city_mpg(vehicle_199, 20), hwy_mpg(vehicle_199, 31), cmb_mpg(vehicle_199, 24), greenhouse_gas_score(vehicle_199, 7).
 friendly_environment(vehicle_199) :- vehicle(vehicle_199), air_pollution_score(vehicle_199, 7), 7 <= 7.
-distance(sss, ssssss, 1204).
-distance(ssssss, sss, 1204).
-distance(sss, ssssss, 1482).
-distance(ssssss, sss, 1482).
-distance(ssssss, ssssss, 717).
-distance(ssssss, ssssss, 717).
+distance(ss, ss33, 63).
+distance(ss33, ss, 63).
+distance(ss, ss3333, 117).
+distance(ss3333, ss, 117).
+distance(ss, sophiasideri2222, 142).
+distance(sophiasideri2222, ss, 142).
+distance(ss, dddsophiasideri2222, 117).
+distance(dddsophiasideri2222, ss, 117).
+distance(ss, dddsophiasideri2222, 0).
+distance(dddsophiasideri2222, ss, 0).
+distance(ss, dddsophiasideri2222, 63).
+distance(dddsophiasideri2222, ss, 63).
+distance(ss, dddsophiasideri, 121).
+distance(dddsophiasideri, ss, 121).
+distance(ss, dddsophiaside, 207).
+distance(dddsophiaside, ss, 207).
+distance(ss, dddd, 41).
+distance(dddd, ss, 41).
+distance(ss, ddddffff, 63).
+distance(ddddffff, ss, 63).
+distance(ss, ddddffffggg, 157).
+distance(ddddffffggg, ss, 157).
+distance(ss, sophiasideri222, 63).
+distance(sophiasideri222, ss, 63).
+distance(ss, sophiasideri222, 117).
+distance(sophiasideri222, ss, 117).
+distance(ss, sophiasideri222, 157).
+distance(sophiasideri222, ss, 157).
+distance(ss, ddd, 14).
+distance(ddd, ss, 14).
+distance(ss, dddss, 117).
+distance(dddss, ss, 117).
+distance(ss, ssdddss, 184).
+distance(ssdddss, ss, 184).
+distance(ss33, ss3333, 55).
+distance(ss3333, ss33, 55).
+distance(ss33, sophiasideri2222, 84).
+distance(sophiasideri2222, ss33, 84).
+distance(ss33, dddsophiasideri2222, 55).
+distance(dddsophiasideri2222, ss33, 55).
+distance(ss33, dddsophiasideri2222, 63).
+distance(dddsophiasideri2222, ss33, 63).
+distance(ss33, dddsophiasideri2222, 0).
+distance(dddsophiasideri2222, ss33, 0).
+distance(ss33, dddsophiasideri, 59).
+distance(dddsophiasideri, ss33, 59).
+distance(ss33, dddsophiaside, 144).
+distance(dddsophiaside, ss33, 144).
+distance(ss33, dddd, 35).
+distance(dddd, ss33, 35).
+distance(ss33, ddddffff, 0).
+distance(ddddffff, ss33, 0).
+distance(ss33, ddddffffggg, 95).
+distance(ddddffffggg, ss33, 95).
+distance(ss33, sophiasideri222, 0).
+distance(sophiasideri222, ss33, 0).
+distance(ss33, sophiasideri222, 55).
+distance(sophiasideri222, ss33, 55).
+distance(ss33, sophiasideri222, 95).
+distance(sophiasideri222, ss33, 95).
+distance(ss33, ddd, 50).
+distance(ddd, ss33, 50).
+distance(ss33, dddss, 55).
+distance(dddss, ss33, 55).
+distance(ss33, ssdddss, 121).
+distance(ssdddss, ss33, 121).
+distance(ss3333, sophiasideri2222, 51).
+distance(sophiasideri2222, ss3333, 51).
+distance(ss3333, dddsophiasideri2222, 0).
+distance(dddsophiasideri2222, ss3333, 0).
+distance(ss3333, dddsophiasideri2222, 117).
+distance(dddsophiasideri2222, ss3333, 117).
+distance(ss3333, dddsophiasideri2222, 55).
+distance(dddsophiasideri2222, ss3333, 55).
+distance(ss3333, dddsophiasideri, 10).
+distance(dddsophiasideri, ss3333, 10).
+distance(ss3333, dddsophiaside, 90).
+distance(dddsophiaside, ss3333, 90).
+distance(ss3333, dddd, 86).
+distance(dddd, ss3333, 86).
+distance(ss3333, ddddffff, 55).
+distance(ddddffff, ss3333, 55).
+distance(ss3333, ddddffffggg, 41).
+distance(ddddffffggg, ss3333, 41).
+distance(ss3333, sophiasideri222, 55).
+distance(sophiasideri222, ss3333, 55).
+distance(ss3333, sophiasideri222, 0).
+distance(sophiasideri222, ss3333, 0).
+distance(ss3333, sophiasideri222, 41).
+distance(sophiasideri222, ss3333, 41).
+distance(ss3333, ddd, 104).
+distance(ddd, ss3333, 104).
+distance(ss3333, dddss, 0).
+distance(dddss, ss3333, 0).
+distance(ss3333, ssdddss, 67).
+distance(ssdddss, ss3333, 67).
+distance(sophiasideri2222, dddsophiasideri2222, 51).
+distance(dddsophiasideri2222, sophiasideri2222, 51).
+distance(sophiasideri2222, dddsophiasideri2222, 142).
+distance(dddsophiasideri2222, sophiasideri2222, 142).
+distance(sophiasideri2222, dddsophiasideri2222, 84).
+distance(dddsophiasideri2222, sophiasideri2222, 84).
+distance(sophiasideri2222, dddsophiasideri, 59).
+distance(dddsophiasideri, sophiasideri2222, 59).
+distance(sophiasideri2222, dddsophiaside, 88).
+distance(dddsophiaside, sophiasideri2222, 88).
+distance(sophiasideri2222, dddd, 103).
+distance(dddd, sophiasideri2222, 103).
+distance(sophiasideri2222, ddddffff, 84).
+distance(ddddffff, sophiasideri2222, 84).
+distance(sophiasideri2222, ddddffffggg, 63).
+distance(ddddffffggg, sophiasideri2222, 63).
+distance(sophiasideri2222, sophiasideri222, 84).
+distance(sophiasideri222, sophiasideri2222, 84).
+distance(sophiasideri2222, sophiasideri222, 51).
+distance(sophiasideri222, sophiasideri2222, 51).
+distance(sophiasideri2222, sophiasideri222, 63).
+distance(sophiasideri222, sophiasideri2222, 63).
+distance(sophiasideri2222, ddd, 130).
+distance(ddd, sophiasideri2222, 130).
+distance(sophiasideri2222, dddss, 51).
+distance(dddss, sophiasideri2222, 51).
+distance(sophiasideri2222, ssdddss, 71).
+distance(ssdddss, sophiasideri2222, 71).
+distance(dddsophiasideri2222, dddsophiasideri2222, 117).
+distance(dddsophiasideri2222, dddsophiasideri2222, 117).
+distance(dddsophiasideri2222, dddsophiasideri2222, 55).
+distance(dddsophiasideri2222, dddsophiasideri2222, 55).
+distance(dddsophiasideri2222, dddsophiasideri, 10).
+distance(dddsophiasideri, dddsophiasideri2222, 10).
+distance(dddsophiasideri2222, dddsophiaside, 90).
+distance(dddsophiaside, dddsophiasideri2222, 90).
+distance(dddsophiasideri2222, dddd, 86).
+distance(dddd, dddsophiasideri2222, 86).
+distance(dddsophiasideri2222, ddddffff, 55).
+distance(ddddffff, dddsophiasideri2222, 55).
+distance(dddsophiasideri2222, ddddffffggg, 41).
+distance(ddddffffggg, dddsophiasideri2222, 41).
+distance(dddsophiasideri2222, sophiasideri222, 55).
+distance(sophiasideri222, dddsophiasideri2222, 55).
+distance(dddsophiasideri2222, sophiasideri222, 0).
+distance(sophiasideri222, dddsophiasideri2222, 0).
+distance(dddsophiasideri2222, sophiasideri222, 41).
+distance(sophiasideri222, dddsophiasideri2222, 41).
+distance(dddsophiasideri2222, ddd, 104).
+distance(ddd, dddsophiasideri2222, 104).
+distance(dddsophiasideri2222, dddss, 0).
+distance(dddss, dddsophiasideri2222, 0).
+distance(dddsophiasideri2222, ssdddss, 67).
+distance(ssdddss, dddsophiasideri2222, 67).
+distance(dddsophiasideri2222, dddsophiasideri2222, 63).
+distance(dddsophiasideri2222, dddsophiasideri2222, 63).
+distance(dddsophiasideri2222, dddsophiasideri, 121).
+distance(dddsophiasideri, dddsophiasideri2222, 121).
+distance(dddsophiasideri2222, dddsophiaside, 207).
+distance(dddsophiaside, dddsophiasideri2222, 207).
+distance(dddsophiasideri2222, dddd, 41).
+distance(dddd, dddsophiasideri2222, 41).
+distance(dddsophiasideri2222, ddddffff, 63).
+distance(ddddffff, dddsophiasideri2222, 63).
+distance(dddsophiasideri2222, ddddffffggg, 157).
+distance(ddddffffggg, dddsophiasideri2222, 157).
+distance(dddsophiasideri2222, sophiasideri222, 63).
+distance(sophiasideri222, dddsophiasideri2222, 63).
+distance(dddsophiasideri2222, sophiasideri222, 117).
+distance(sophiasideri222, dddsophiasideri2222, 117).
+distance(dddsophiasideri2222, sophiasideri222, 157).
+distance(sophiasideri222, dddsophiasideri2222, 157).
+distance(dddsophiasideri2222, ddd, 14).
+distance(ddd, dddsophiasideri2222, 14).
+distance(dddsophiasideri2222, dddss, 117).
+distance(dddss, dddsophiasideri2222, 117).
+distance(dddsophiasideri2222, ssdddss, 184).
+distance(ssdddss, dddsophiasideri2222, 184).
+distance(dddsophiasideri2222, dddsophiasideri, 59).
+distance(dddsophiasideri, dddsophiasideri2222, 59).
+distance(dddsophiasideri2222, dddsophiaside, 144).
+distance(dddsophiaside, dddsophiasideri2222, 144).
+distance(dddsophiasideri2222, dddd, 35).
+distance(dddd, dddsophiasideri2222, 35).
+distance(dddsophiasideri2222, ddddffff, 0).
+distance(ddddffff, dddsophiasideri2222, 0).
+distance(dddsophiasideri2222, ddddffffggg, 95).
+distance(ddddffffggg, dddsophiasideri2222, 95).
+distance(dddsophiasideri2222, sophiasideri222, 0).
+distance(sophiasideri222, dddsophiasideri2222, 0).
+distance(dddsophiasideri2222, sophiasideri222, 55).
+distance(sophiasideri222, dddsophiasideri2222, 55).
+distance(dddsophiasideri2222, sophiasideri222, 95).
+distance(sophiasideri222, dddsophiasideri2222, 95).
+distance(dddsophiasideri2222, ddd, 50).
+distance(ddd, dddsophiasideri2222, 50).
+distance(dddsophiasideri2222, dddss, 55).
+distance(dddss, dddsophiasideri2222, 55).
+distance(dddsophiasideri2222, ssdddss, 121).
+distance(ssdddss, dddsophiasideri2222, 121).
+distance(dddsophiasideri, dddsophiaside, 87).
+distance(dddsophiaside, dddsophiasideri, 87).
+distance(dddsophiasideri, dddd, 92).
+distance(dddd, dddsophiasideri, 92).
+distance(dddsophiasideri, ddddffff, 59).
+distance(ddddffff, dddsophiasideri, 59).
+distance(dddsophiasideri, ddddffffggg, 36).
+distance(ddddffffggg, dddsophiasideri, 36).
+distance(dddsophiasideri, sophiasideri222, 59).
+distance(sophiasideri222, dddsophiasideri, 59).
+distance(dddsophiasideri, sophiasideri222, 10).
+distance(sophiasideri222, dddsophiasideri, 10).
+distance(dddsophiasideri, sophiasideri222, 36).
+distance(sophiasideri222, dddsophiasideri, 36).
+distance(dddsophiasideri, ddd, 107).
+distance(ddd, dddsophiasideri, 107).
+distance(dddsophiasideri, dddss, 10).
+distance(dddss, dddsophiasideri, 10).
+distance(dddsophiasideri, ssdddss, 64).
+distance(ssdddss, dddsophiasideri, 64).
+distance(dddsophiaside, dddd, 174).
+distance(dddd, dddsophiaside, 174).
+distance(dddsophiaside, ddddffff, 144).
+distance(ddddffff, dddsophiaside, 144).
+distance(dddsophiaside, ddddffffggg, 51).
+distance(ddddffffggg, dddsophiaside, 51).
+distance(dddsophiaside, sophiasideri222, 144).
+distance(sophiasideri222, dddsophiaside, 144).
+distance(dddsophiaside, sophiasideri222, 90).
+distance(sophiasideri222, dddsophiaside, 90).
+distance(dddsophiaside, sophiasideri222, 51).
+distance(sophiasideri222, dddsophiaside, 51).
+distance(dddsophiaside, ddd, 194).
+distance(ddd, dddsophiaside, 194).
+distance(dddsophiaside, dddss, 90).
+distance(dddss, dddsophiaside, 90).
+distance(dddsophiaside, ssdddss, 23).
+distance(ssdddss, dddsophiaside, 23).
+distance(dddd, ddddffff, 35).
+distance(ddddffff, dddd, 35).
+distance(dddd, ddddffffggg, 127).
+distance(ddddffffggg, dddd, 127).
+distance(dddd, sophiasideri222, 35).
+distance(sophiasideri222, dddd, 35).
+distance(dddd, sophiasideri222, 86).
+distance(sophiasideri222, dddd, 86).
+distance(dddd, sophiasideri222, 127).
+distance(sophiasideri222, dddd, 127).
+distance(dddd, ddd, 32).
+distance(ddd, dddd, 32).
+distance(dddd, dddss, 86).
+distance(dddss, dddd, 86).
+distance(dddd, ssdddss, 152).
+distance(ssdddss, dddd, 152).
+distance(ddddffff, ddddffffggg, 95).
+distance(ddddffffggg, ddddffff, 95).
+distance(ddddffff, sophiasideri222, 0).
+distance(sophiasideri222, ddddffff, 0).
+distance(ddddffff, sophiasideri222, 55).
+distance(sophiasideri222, ddddffff, 55).
+distance(ddddffff, sophiasideri222, 95).
+distance(sophiasideri222, ddddffff, 95).
+distance(ddddffff, ddd, 50).
+distance(ddd, ddddffff, 50).
+distance(ddddffff, dddss, 55).
+distance(dddss, ddddffff, 55).
+distance(ddddffff, ssdddss, 121).
+distance(ssdddss, ddddffff, 121).
+distance(ddddffffggg, sophiasideri222, 95).
+distance(sophiasideri222, ddddffffggg, 95).
+distance(ddddffffggg, sophiasideri222, 41).
+distance(sophiasideri222, ddddffffggg, 41).
+distance(ddddffffggg, sophiasideri222, 0).
+distance(sophiasideri222, ddddffffggg, 0).
+distance(ddddffffggg, ddd, 144).
+distance(ddd, ddddffffggg, 144).
+distance(ddddffffggg, dddss, 41).
+distance(dddss, ddddffffggg, 41).
+distance(ddddffffggg, ssdddss, 28).
+distance(ssdddss, ddddffffggg, 28).
+distance(sophiasideri222, sophiasideri222, 55).
+distance(sophiasideri222, sophiasideri222, 55).
+distance(sophiasideri222, sophiasideri222, 95).
+distance(sophiasideri222, sophiasideri222, 95).
+distance(sophiasideri222, ddd, 50).
+distance(ddd, sophiasideri222, 50).
+distance(sophiasideri222, dddss, 55).
+distance(dddss, sophiasideri222, 55).
+distance(sophiasideri222, ssdddss, 121).
+distance(ssdddss, sophiasideri222, 121).
+distance(sophiasideri222, sophiasideri222, 41).
+distance(sophiasideri222, sophiasideri222, 41).
+distance(sophiasideri222, ddd, 104).
+distance(ddd, sophiasideri222, 104).
+distance(sophiasideri222, dddss, 0).
+distance(dddss, sophiasideri222, 0).
+distance(sophiasideri222, ssdddss, 67).
+distance(ssdddss, sophiasideri222, 67).
+distance(sophiasideri222, ddd, 144).
+distance(ddd, sophiasideri222, 144).
+distance(sophiasideri222, dddss, 41).
+distance(dddss, sophiasideri222, 41).
+distance(sophiasideri222, ssdddss, 28).
+distance(ssdddss, sophiasideri222, 28).
+distance(ddd, dddss, 104).
+distance(dddss, ddd, 104).
+distance(ddd, ssdddss, 171).
+distance(ssdddss, ddd, 171).
+distance(dddss, ssdddss, 67).
+distance(ssdddss, dddss, 67).
