@@ -677,201 +677,90 @@ router.get('/getRoutes', async (req, res) => {
 // ----------------------------------------------------------
 router.get('/retrieveASPrules', async (req, res) => {
   try {
-    // Build 'filter' from query or body
-    //const filter = req.body.filter || {};
-    //for (const [key, val] of Object.entries(req.query)) {
-    //ε  const numVal = Number(val);
-    //  filter[key] = isNaN(numVal) ? val : numVal;
-    //}
-
-    // 1) Load data
     const nodes = await loadStopsFromNeo4j();
-    const filter = { stnd : 'T3B0' };
-    const vehicles = await mergeVehiclesFromNeo4j(filter);
-    // const vehicles = await populateVehiclesFromCars();
-    console.log('v111 CHECK Loaded VEHICLES', vehicles);
-
-    // 2) Build base ASP facts
-    let aspFacts = `
-% ------------------------------------------------------
-% Score Weights & Penalties
-weight_duration(2).
-weight_distance(1).
-penalty_air_pollution(-1).
-bonus_smartway_elite(10).
-
-% ------------------------------------------------------
-% Node & Vehicle definitions
-node(X) :- latitude(X, _), longitude(X, _).
-vehicle(X) :-
-    transmission(X, _), fuel(X, _), air_pollution_score(X, _), display(X, _),
-    cyl(X, _), drive(X, _), stnd(X, _), stnd_description(X, _),
-    cert_region(X, _), underhood_id(X, _), veh_class(X, _),
-    city_mpg(X, _), hwy_mpg(X, _), cmb_mpg(X, _),
-    greenhouse_gas_score(X, _), smartway(X, _), price_eur(X, _).
-
-friendly_environment(X) :- vehicle(X), air_pollution_score(X, Score), Score <= 7.
-
-vehicle_score(V, Total) :-
-    vehicle(V),
-    air_pollution_score(V, APS),
-    city_mpg(V, CMPG),
-    hwy_mpg(V, HMPG),
-    cmb_mpg(V, CBMPG),
-    greenhouse_gas_score(V, GGS),
-    smartway(V, S),
-    penalty_air_pollution(PAP),
-    bonus_smartway_elite(Bonus),
-    BonusAmount = Bonus * (S = "ELITE"),
-    Total = APS * PAP + CMPG + HMPG + CBMPG - GGS + BonusAmount.
-
-max_vehicle_score(Max) :- Max = #max { Total : vehicle_score(_, Total)}.
-best_vehicle(V) :- vehicle_score(V, Total), max_vehicle_score(Total).
-
-route_score(R, Total) :-
-    route(R),
-    distance(R, D),
-    time(R, T),
-    weight_duration(WD),
-    weight_distance(WDist),
-    Total = WD * T + WDist * D.
-
-min_route_score(Min) :- Min = #min { Total : route_score(_, Total)}.
-best_route(R) :- route_score(R, Total), min_route_score(Total).
-% ------------------------------------------------------
-`;
-
-    // Helper functions for facts
-    const addStringFact = (pred, ...args) => {
-      aspFacts += `${pred}(${args.map(a => `"${a}"`).join(', ')}).\n`;
-    };
-    const addNumericFact = (pred, ...args) => {
-      aspFacts += `${pred}(${args.join(', ')}).\n`;
-    };
-    const addRule = (head, body) => {
-      aspFacts += `${head} :- ${body.join(', ')}.\n`;
-    };
-
-    // 3) Generate route facts from ORS
-    const configObj = { ORS_Key: config.ORS_Key };
-    const locations = nodes.map(n => [n.longitude, n.latitude]);
-    const routes = await fetchAndAnalyzeRoutes(locations, configObj);
-
-    routes.forEach((route, idx) => {
-      const routeId = `r${idx + 1}`;
-      addNumericFact('route', routeId);
-      addNumericFact('distance', routeId, route.distance);
-      addNumericFact('time', routeId, route.duration);
-      const routeScore = 2 * route.duration + route.distance; // or your logic
-      addRule(`route_score(${routeId}, ${routeScore})`, [
-        `route(${routeId})`,
-        `distance(${routeId}, ${route.distance})`,
-        `time(${routeId}, ${route.duration})`,
-      ]);
-    });
-
-    // 4) node(...) facts
+        // Build 'filter' from query or body
+    const filter = req.body.filter || {};
+    for (const [key, val] of Object.entries(req.query)) {
+      const numVal = Number(val);
+      filter[key] = isNaN(numVal) ? val : numVal;
+    }
+    // todo print filters
+    console.log('filters are ', filter);
+    const vehicles = await mergeVehiclesFromNeo4j();
+    console.log('v11 vehicless are --> ', vehicles);
+    let aspFacts = '';
     const processedNodes = new Set();
-    let nodeIndex = 0;
 
-    nodes.forEach(node => {
-      let nodeName = transliterate(node.name || nodeIndex++)
-        .toLowerCase()
-        .replace(/[^a-z0-9_]+/g, '')
-        + '_' + nodeIndex;
+    // (a) node(...)
+  nodes.forEach((node) => {
+    // Thoroughly remove invalid punctuation
+    let nodeName = transliterate(node.name || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, ''); // Remove invalid characters
+    if (!nodeName.match(/^[a-z]/)) {
+      nodeName = 'node_' + nodeName; // Prefix if it doesn't start with a letter
+    }
 
-      if (!nodeName.match(/^[a-z]/)) {
-        nodeName = 'node_' + nodeName;
-      }
-      if (!processedNodes.has(nodeName)) {
-        processedNodes.add(nodeName);
-      }
+    if (!processedNodes.has(nodeName)) {
+      processedNodes.add(nodeName);
+    }
 
-      addStringFact('node', nodeName);
-      addStringFact('latitude', nodeName, node.latitude);
-      addStringFact('longitude', nodeName, node.longitude);
-      if (node.demand) {
-        addNumericFact('demand', nodeName, node.demand);
-      }
-    });
+    // Convert latitude and longitude to strings
+    const latitude = `"${node.latitude}"`;
+    const longitude = `"${node.longitude}"`;
 
-    // 5) vehicle(...) facts
-    let vehicleIndex = 0;
-    vehicles.forEach(v => {
-      let vehicleID = transliterate(String(v.vehicleID || vehicleIndex++))
+    // Generate ASP facts
+    aspFacts += `node(${nodeName}).\n`;
+    aspFacts += `latitude(${nodeName}, ${latitude}).\n`;
+    aspFacts += `longitude(${nodeName}, ${longitude}).\n`;
+    if (node.demand) {
+      aspFacts += `demand(${nodeName}, ${node.demand}).\n`;
+    }
+  });
+
+
+    // (b) vehicle(...)
+    vehicles.forEach((v) => {
+      let vehicleID = transliterate(v.vehicleName || '')
         .toLowerCase()
         .replace(/[^a-z0-9_]+/g, '');
       if (!vehicleID.match(/^[a-z]/)) {
         vehicleID = 'vehicle_' + vehicleID;
       }
-      addStringFact('vehicle', vehicleID);
-      if (v.fuel) addStringFact('fuel', vehicleID, v.fuel);
-      if (v.air_pollution_score) addNumericFact('air_pollution_score', vehicleID, v.air_pollution_score);
-      if (v.transmission) addStringFact('transmission', vehicleID, v.transmission);
-      if (v.underhood_id) addStringFact('underhood_id', vehicleID, v.underhood_id);
-      if (v.veh_class) addStringFact('veh_class', vehicleID, v.veh_class);
-      if (v.city_mpg) addNumericFact('city_mpg', vehicleID, v.city_mpg);
-      if (v.hwy_mpg) addNumericFact('hwy_mpg', vehicleID, v.hwy_mpg);
-      if (v.cmb_mpg) addNumericFact('cmb_mpg', vehicleID, v.cmb_mpg);
-      if (v.greenhouse_gas_score) addNumericFact('greenhouse_gas_score', vehicleID, v.greenhouse_gas_score);
-      if (v.smartway) addStringFact('smartway', vehicleID, v.smartway);
-      if (v.price_eur) addNumericFact('price_eur', vehicleID, v.price_eur);
-      if (v.display) addStringFact('display', vehicleID, v.display);
-      if (v.cyl) addNumericFact('cyl', vehicleID, v.cyl);
-      if (v.drive) addStringFact('drive', vehicleID, v.drive);
-      if (v.stnd) addStringFact('stnd', vehicleID, v.stnd);
-      if (v.stnd_description) addStringFact('stnd_description', vehicleID, v.stnd_description);
-      if (v.cert_region) addStringFact('cert_region', vehicleID, v.cert_region);
 
-      // Additional scoring logic
-      const isElite = v.smartway === 'ELITE' ? 10 : 0;
-      const aps = Number(v.air_pollution_score || 0);
-      const cityMpg = Number(v.city_mpg || 0);
-      const hwyMpg = Number(v.hwy_mpg || 0);
-      const cmbMpg = Number(v.cmb_mpg || 0);
-      const ggs = Number(v.greenhouse_gas_score || 0);
-      const total = -aps + cityMpg + hwyMpg + cmbMpg - ggs + isElite;
-
-      addRule(`vehicle_score(${vehicleID}, ${total})`, [
-        `vehicle(${vehicleID})`,
-        `air_pollution_score(${vehicleID}, ${aps})`,
-        `city_mpg(${vehicleID}, ${cityMpg})`,
-        `hwy_mpg(${vehicleID}, ${hwyMpg})`,
-        `cmb_mpg(${vehicleID}, ${cmbMpg})`,
-        `greenhouse_gas_score(${vehicleID}, ${ggs})`,
-      ]);
-
-      // friendly_environment
-      if (v.air_pollution_score && aps <= 7) {
-        addRule(`friendly_environment(${vehicleID})`, [
-          `vehicle(${vehicleID})`,
-          `air_pollution_score(${vehicleID}, ${aps})`,
-          `${aps} <= 7`,
-        ]);
+      aspFacts += `vehicle(${vehicleID}).\n`;
+      if (v.capacity) {
+        aspFacts += `capacity(${vehicleID}, ${v.capacity}).\n`;
       }
     });
 
-    // 6) distance(A,B,D)
+    // (c) distance(A,B,C) via Haversine
     const allDistances = computeAllDistances(nodes);
-    allDistances.forEach(dist => {
-      let fromName = transliterate(dist.from || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
-      if (!fromName.match(/^[a-z]/)) fromName = 'unknown';
-      let toName = transliterate(dist.to || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
-      if (!toName.match(/^[a-z]/)) toName = 'unknown';
+    allDistances.forEach((dist) => {
+      let fromName = transliterate(dist.from || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, '');
+      if (!fromName.match(/^[a-z]/)) {
+        fromName = 'unknown';
+      }
 
-      addNumericFact('distance', fromName, toName, dist.distance);
+      let toName = transliterate(dist.to || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, '');
+      if (!toName.match(/^[a-z]/)) {
+        toName = 'unknown';
+      }
+
+      aspFacts += `distance(${fromName}, ${toName}, ${dist.distance}).\n`;
     });
 
-    // 7) Return ASP facts
     return res.type('text/plain').send(aspFacts);
-  } catch (error) {
-    console.error('[ERROR] /retrieveASPrules:', error);
+  } catch (err) {
+    console.error('Error building ASP facts:', err);
     res.status(500).send('Error building ASP facts');
   }
 });
 
-// ----------------------------------------------------------
-// 6) runPythonScript (Clingo)
 router.get('/runPythonScript', (req, res) => {
   try {
     const scriptPath = path.join(__dirname, 'clingoFiles', 'nemoClingoRouting.py');
@@ -883,30 +772,35 @@ router.get('/runPythonScript', (req, res) => {
       { timeout: 70000 },
       (err, stdout, stderr) => {
         if (err) {
-          console.error('[ERROR] Clingo execution:', err);
+          console.error('Clingo execution error:', err);
           if (err.killed) {
             return res.status(504).send('Clingo script timed out.');
           }
           return res.status(500).send(err.message);
         }
         if (stderr) {
-          console.error('[WARN] Stderr from python script:', stderr);
+          console.error('Stderr from python script:', stderr);
         }
+        console.log('Python script output:', stdout);
+
+        // If your script prints JSON, parse it:
         let routeData;
         try {
           routeData = JSON.parse(stdout);
         } catch (parseError) {
-          console.error('[ERROR] Could not parse JSON from stdout. Fallback...');
+          console.error('Could not parse JSON from stdout. Falling back...');
           routeData = [];
         }
+
         res.json({ routeData });
       }
     );
   } catch (error) {
-    console.error('[ERROR] in /runPythonScript:', error);
+    console.error('Error in /runPythonScript:', error);
     res.status(500).send('Error in runPythonScript');
   }
 });
+// ----------------------------------------------------------
 
 // ----------------------------------------------------------
 // 7) stopPythonScript
