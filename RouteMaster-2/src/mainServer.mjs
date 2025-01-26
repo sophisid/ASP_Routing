@@ -70,7 +70,7 @@ function populateDatabase() {
 
 async function checkAndPopulateDatabase(req, res, next) {
   try {
-    console.log('Checking if the database is empty...');
+    console.log('Checking if the database is empty...1');
     const isEmpty = await isDatabaseEmpty();
     if (isEmpty) {
       console.log('Database is empty. Populating...');
@@ -208,53 +208,63 @@ async function mergeVehiclesFromNeo4j(filter = {}) {
   try {
     // Build dynamic filter conditions
     const conditions = Object.entries(filter)
-      .map(([key, value]) => `c.${key} = '${value}'`)
+      .map(([key, value]) => {
+        const condition = `c.${key} = '${value}'`;
+        console.log(`Condition: ${condition}`); // Print each condition
+        return condition;
+      })
       .join(' AND ');
-
-    const mergeVehiclesQuery = `
-      MATCH (v:Vehicle), (c:cars)
-      WHERE ${conditions.length > 0 ? conditions : 'true'}
-      SET v += {
-            vehicleName: c.vehicleName,
-            model: c.model,
-            fuel: c.fuel,
-            air_pollution_score: c.air_pollution_score,
-            display: c.display,
-            cyl: c.cyl,
-            drive: c.drive,
-            stnd: c.stnd,
-            stnd_description: c.stnd_description,
-            cert_region: c.cert_region,
-            transmission: c.transmission,
-            underhood_id: c.underhood_id,
-            veh_class: c.veh_class,
-            city_mpg: c.city_mpg,
-            hwy_mpg: c.hwy_mpg,
-            cmb_mpg: c.cmb_mpg,
-            greenhouse_gas_score: c.greenhouse_gas_score,
-            smartway: c.smartway,
-            price_eur: c.price_eur
-          }
-      RETURN v.vehicleName AS vehicleName, 
-             v.model AS model,
-             v.fuel AS fuel,
-             v.air_pollution_score AS air_pollution_score,
-             v.display AS display,
-             v.cyl AS cyl,
-             v.drive AS drive,
-             v.stnd AS stnd,
-             v.stnd_description AS stnd_description,
-             v.cert_region AS cert_region,
-             v.transmission AS transmission,
-             v.underhood_id AS underhood_id,
-             v.veh_class AS veh_class,
-             v.city_mpg AS city_mpg,
-             v.hwy_mpg AS hwy_mpg,
-             v.cmb_mpg AS cmb_mpg,
-             v.greenhouse_gas_score AS greenhouse_gas_score,
-             v.smartway AS smartway,
-             v.price_eur AS price_eur;
-    `;
+      console.log('Conditions length:', conditions.length);
+      console.log('Conditions string:', conditions);
+  
+      const extraWhere = conditions.length > 0 ? `AND ${conditions}` : '';
+  
+      const mergeVehiclesQuery = `
+        MATCH (v:Vehicle), (c:cars)
+        WHERE v.carsID = c.ID
+        ${extraWhere}
+        SET v += {
+          vehicleName: c.vehicleName,
+          model: c.model,
+          fuel: c.fuel,
+          air_pollution_score: c.air_pollution_score,
+          display: c.display,
+          cyl: c.cyl,
+          drive: c.drive,
+          stnd: c.stnd,
+          stnd_description: c.stnd_description,
+          cert_region: c.cert_region,
+          transmission: c.transmission,
+          underhood_id: c.underhood_id,
+          veh_class: c.veh_class,
+          city_mpg: c.city_mpg,
+          hwy_mpg: c.hwy_mpg,
+          cmb_mpg: c.cmb_mpg,
+          greenhouse_gas_score: c.greenhouse_gas_score,
+          smartway: c.smartway,
+          price_eur: c.price_eur
+        }
+        RETURN 
+          v.vehicleName AS vehicleName,
+          v.model AS model,
+          v.fuel AS fuel,
+          v.air_pollution_score AS air_pollution_score,
+          v.display AS display,
+          v.cyl AS cyl,
+          v.drive AS drive,
+          v.stnd AS stnd,
+          v.stnd_description AS stnd_description,
+          v.cert_region AS cert_region,
+          v.transmission AS transmission,
+          v.underhood_id AS underhood_id,
+          v.veh_class AS veh_class,
+          v.city_mpg AS city_mpg,
+          v.hwy_mpg AS hwy_mpg,
+          v.cmb_mpg AS cmb_mpg,
+          v.greenhouse_gas_score AS greenhouse_gas_score,
+          v.smartway AS smartway,
+          v.price_eur AS price_eur;
+      `;
 
     const result = await session.run(mergeVehiclesQuery);
 
@@ -354,7 +364,7 @@ async function loadVehiclesFromNeo4j() {
 router.get('/checkonload', 
   async (req, res) => {
     try {
-      console.log('Checking if the database is empty...');
+      console.log('Checking if the database is empty...2');
       const isEmpty = await isDatabaseEmpty();
       if (isEmpty) {
         console.log('Database is empty. Populating...');
@@ -678,7 +688,7 @@ router.post('/getOurRoutes', async (req, res) => {
         const decoded = polylineLib.decode(route.geometry);
 
         // Example metrics:
-        const totalStops = (route.way_points?.length || 2) - 2; // Excluding start & end
+        const totalStops = (route.way_points.length || 2) - 2; // Excluding start & end
         const tollwayDistance = 0;  // or your logic for "tollway" segments
         const elevationChanges = { totalElevationGain: 0, totalElevationLoss: 0 }; // optional
 
@@ -770,9 +780,10 @@ router.get('/retrieveASPrules', async (req, res) => {
   try {
 
     const nodes = await loadStopsFromNeo4j();
-    const vehicles = await mergeVehiclesFromNeo4j();
+    const filter = { stnd : 'T3B0' };
+    const vehicles = await mergeVehiclesFromNeo4j(filter);
     // const vehicles = await populateVehiclesFromCars();
-    // console.log('Loaded:', vehicles);
+    console.log('v111 CHECK Loaded VEHICLES', vehicles);
     let aspFacts = '';
     const processedNodes = new Set();
 
