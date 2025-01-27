@@ -696,9 +696,16 @@ router.get('/retrieveASPrules', async (req, res) => {
     
     const vehiclesFilters = await getVehicleFilters(); // these are the selected filters for the vehicles
     console.log('vehicleFilterResult is ', vehiclesFilters);
-
-    const vehicles = await mergeVehiclesFromNeo4j();
-    // console.log('v11 vehicless are --> ', vehicles);
+    const vehicles = [];
+    vehiclesFilters.forEach(async filter => {
+      try{
+        vehs = await mergeVehiclesFromNeo4j(filter);
+        vehicles.push(vehs);
+      }catch(err){
+        console.log("Error merging vehicles..\n");
+      }
+  });
+    console.log('v11 vehicless are --> ', vehicles);
     let aspFacts = '';
     const processedNodes = new Set();
 
