@@ -259,7 +259,7 @@ async function generateVehicleConfigFields(numVehicles) {
 
         <div class="form-group">
           <label for="price_eur${i}">Price (EUR):</label>
-          <input type="range" id="price_eur${i}" min="1000" max="100000" step="1000" value="5000">
+          <input type="range" id="price_eur${i}" min="1000" max="100000" step="1000" value="-1">
         </div>
         <div class="form-group">
           <label for="smartway${i}">SmartWay?:</label>

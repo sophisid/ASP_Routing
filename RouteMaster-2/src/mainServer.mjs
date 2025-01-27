@@ -196,6 +196,21 @@ async function loadStopsFromNeo4j() {
   }
 }
 
+async function getVehicleFilters() {
+  const session = driver.session({ database: config.neo4jDatabase });
+  try {
+    const query = `MATCH (v:Vehicle) RETURN v`;
+    const result = await session.run(query);
+    return result.records.map(record => record.get('v').properties);
+  } catch (error) {
+    console.error('[ERROR] getVehicleFilters:', error);
+    throw new Error('Failed to get vehicle filters.');
+  } finally {
+    await session.close();
+  }
+}
+
+
 async function mergeVehiclesFromNeo4j(filter = {}) {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
@@ -677,17 +692,13 @@ router.get('/getRoutes', async (req, res) => {
 // ----------------------------------------------------------
 router.get('/retrieveASPrules', async (req, res) => {
   try {
-    const nodes = await loadStopsFromNeo4j();
-        // Build 'filter' from query or body
-    const filter = req.body.filter || {};
-    for (const [key, val] of Object.entries(req.query)) {
-      const numVal = Number(val);
-      filter[key] = isNaN(numVal) ? val : numVal;
-    }
-    // todo print filters
-    console.log('filters are ', filter);
+    const nodes = await loadStopsFromNeo4j(); // these are the stops 
+    
+    const vehiclesFilters = await getVehicleFilters(); // these are the selected filters for the vehicles
+    console.log('vehicleFilterResult is ', vehiclesFilters);
+
     const vehicles = await mergeVehiclesFromNeo4j();
-    console.log('v11 vehicless are --> ', vehicles);
+    // console.log('v11 vehicless are --> ', vehicles);
     let aspFacts = '';
     const processedNodes = new Set();
 

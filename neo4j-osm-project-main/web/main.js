@@ -416,7 +416,7 @@ export function clingoRoutingRetrieval(vehicleConfig) {
   const queryParams = new URLSearchParams();
   queryParams.append("vehicleConfig", JSON.stringify(vehicleConfig));
 
-  fetch(`http://localhost:3000/neo4j/runPythonScript?${queryParams.toString()}`)
+  fetch(`http://localhost:3000/neo4j/runPythonScript`)
     .then(response => {
       if (!response.ok) {
         if (response.status === 404) throw new Error('404, Not Found');
@@ -531,6 +531,7 @@ document.addEventListener("DOMContentLoaded", function () {
   findRoutesButtonGroup.addEventListener("mouseleave", () => {
     findRoutesButtonGroup.style.display = "none";
   });
+  resetNodes();
 });
 
 const actionsButtonGroup = document.getElementById('actions-button-group');
