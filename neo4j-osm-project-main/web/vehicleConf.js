@@ -259,7 +259,7 @@ async function generateVehicleConfigFields(numVehicles) {
 
         <div class="form-group">
           <label for="price_eur${i}">Price (EUR):</label>
-          <input type="range" id="price_eur${i}" min="1000" max="100000" step="1000" value="-1">
+          <input type="range" id="price_eur${i}" min="-1" max="100000" step="100" value="-1">
         </div>
         <div class="form-group">
           <label for="smartway${i}">SmartWay?:</label>
@@ -364,7 +364,7 @@ export async function createVehicleInNeo4j(vehicleData) {
       fuel: vehicleData.fuel || null,
       stnd: vehicleData.stnd || null,
       veh_class: vehicleData.veh_class || null,
-      price_eur: vehicleData.price_eur ? parseFloat(vehicleData.price_eur) : null,
+      price_eur: vehicleData.price_eur > -1 ? parseFloat(vehicleData.price_eur) : null, // Only save price if > -1
       smartway: vehicleData.smartway ? "on" : null,
       air_pollution_score: vehicleData.air_pollution_score ? parseFloat(vehicleData.air_pollution_score) : null,
       city_mpg: vehicleData.city_mpg ? parseFloat(vehicleData.city_mpg) : null,
@@ -415,7 +415,9 @@ document.getElementById("vehicleConfigForm").addEventListener("submit", async fu
       fuel:     document.getElementById(`fuel${i}`).value,
       stnd:     document.getElementById(`stnd${i}`).value,
       veh_class:document.getElementById(`veh_class${i}`).value,
-      price_eur:document.getElementById(`price_eur${i}`).value,
+      price_eur: parseFloat(document.getElementById(`price_eur${i}`).value) > -1 
+               ? parseFloat(document.getElementById(`price_eur${i}`).value) 
+               : null,
       smartway: document.getElementById(`smartway${i}`).checked, // "on" if checked
       // air_pollution_score: document.getElementById(`air_pollution_score${i}`).value,
       // city_mpg:  document.getElementById(`city_mpg${i}`).value,

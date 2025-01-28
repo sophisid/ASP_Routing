@@ -195,13 +195,25 @@ async function loadStopsFromNeo4j() {
     await session.close();
   }
 }
-
 async function getVehicleFilters() {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
     const query = `MATCH (v:Vehicle) RETURN v`;
     const result = await session.run(query);
-    return result.records.map(record => record.get('v').properties);
+
+    // Map the results and remove keys with null or NaN values
+    return result.records.map(record => {
+      const vehicle = record.get('v').properties;
+
+      // Iterate over the keys and delete those with null or NaN values
+      for (const key in vehicle) {
+        if (vehicle[key] === null || (typeof vehicle[key] === 'number' && isNaN(vehicle[key]))) {
+          delete vehicle[key];
+        }
+      }
+
+      return vehicle;
+    });
   } catch (error) {
     console.error('[ERROR] getVehicleFilters:', error);
     throw new Error('Failed to get vehicle filters.');
@@ -211,40 +223,83 @@ async function getVehicleFilters() {
 }
 
 
-async function mergeVehiclesFromNeo4j(filter = {}) {
+
+
+async function mergeVehiclesFromNeo4j(filters) {
   const session = driver.session({ database: config.neo4jDatabase });
   try {
-    // Build dynamic filter conditions for the c:cars node
-    const conditions = Object.entries(filter)
-      .map(([key, value]) => `c.${key} = '${value}'`)
-      .join(' AND ');
+    const vehicleResults = [];
 
-    // Add WHERE clause only if there are conditions
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions}` : '';
+    for (let i = 0; i < filters.length; i++) {
+      const filter = filters[i];
+      const whereClauses = [];
+      const params = {};
 
-    // Query to fetch matching cars
-    const query = `
-      MATCH (c:cars)
-      ${whereClause}
-      RETURN c
-    `;
+      for (const key in filter) {
+        if (filter[key] !== null && filter[key] !== undefined && key !== "vehicleID") {
+          const value = filter[key];
 
-    console.log('[DEBUG] Final Query:\n', query);
+          // Check the type of the value and format appropriately
+          if (typeof value === "string") {
+            // For strings, use quotes
+            whereClauses.push(`v.${key} = "${value}"`);
+          } else if (typeof value === "number") {
+            // For numbers, use the raw value (no quotes)
+            whereClauses.push(`v.${key} = ${value}`);
+          } else if (value instanceof Date) {
+            // For dates, format to ISO string and use quotes
+            whereClauses.push(`v.${key} = date("${value.toISOString()}")`);
+          } else {
+            // For other types, convert to string as a fallback
+            whereClauses.push(`$v.${key} = "${String(value)}"`);
+          }
 
-    const result = await session.run(query);
+          // Assign the value to the params object
+          params[key] = value;
+        }
+      }
 
-    // Map over results to return only cars properties
-    const matchingCars = result.records.map((record) => record.get('c').properties);
 
-    console.log('[DEBUG] Number of matching cars found:', matchingCars.length);
-    return matchingCars;
+      // Skip empty filters
+      if (whereClauses.length === 0) {
+        console.log(`[DEBUG] No valid filters for index ${i}, skipping query.`);
+        continue;
+      }
+
+      const whereString = `WHERE ${whereClauses.join(" AND ")}`;
+      console.log(`[DEBUG] whereString for filter ${i}: ${whereString}`);
+      console.log(`[DEBUG] params for filter ${i}:`, params);
+
+      const query = `
+        MATCH (v:cars)
+        ${whereString}
+        RETURN v
+      `;
+
+      const result = await session.run(query, params);
+
+      // Process results
+      result.records.forEach((record) => {
+        const vehicle = record.get("v").properties;
+
+        // Add the vehicle ID to the object
+        vehicle.vehicleID = record.get("v").identity.toInt();
+
+        // Save the full object to the results
+        vehicleResults.push(vehicle);
+      });
+    }
+
+    return vehicleResults;
   } catch (error) {
-    console.error('[ERROR] findMatchingCars:', error);
-    throw new Error('Failed to find matching cars.');
+    console.error("[ERROR] mergeVehiclesFromNeo4j:", error);
+    throw new Error("Failed to fetch vehicles for filters.");
   } finally {
     await session.close();
   }
 }
+
+
 
 async function loadVehiclesFromNeo4j() {
   const session = driver.session({ database: config.neo4jDatabase });
@@ -692,92 +747,54 @@ router.get('/getRoutes', async (req, res) => {
 // ----------------------------------------------------------
 router.get('/retrieveASPrules', async (req, res) => {
   try {
-    const nodes = await loadStopsFromNeo4j(); // these are the stops 
-    
-    const vehiclesFilters = await getVehicleFilters(); // these are the selected filters for the vehicles
-    console.log('vehicleFilterResult is ', vehiclesFilters);
-    const vehicles = [];
-    vehiclesFilters.forEach(async filter => {
-      try{
-        vehs = await mergeVehiclesFromNeo4j(filter);
-        vehicles.push(vehs);
-      }catch(err){
-        console.log("Error merging vehicles..\n");
-      }
-  });
-    console.log('v11 vehicless are --> ', vehicles);
+    const nodes = await loadStopsFromNeo4j();
+    const vehiclesFilters = await getVehicleFilters();
+    const vehicles = await mergeVehiclesFromNeo4j(vehiclesFilters);
     let aspFacts = '';
-    const processedNodes = new Set();
 
-    // (a) node(...)
-  nodes.forEach((node) => {
-    // Thoroughly remove invalid punctuation
-    let nodeName = transliterate(node.name || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9_]+/g, ''); // Remove invalid characters
-    if (!nodeName.match(/^[a-z]/)) {
-      nodeName = 'node_' + nodeName; // Prefix if it doesn't start with a letter
-    }
+    // Generate node facts
+    nodes.forEach((node) => {
+      let nodeName = transliterate(node.name || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
+      if (!nodeName.match(/^[a-z]/)) {
+        nodeName = 'node_' + nodeName;
+      }
+      aspFacts += `node(${nodeName}).\n`;
+      aspFacts += `latitude(${nodeName}, "${node.latitude}").\n`;
+      aspFacts += `longitude(${nodeName}, "${node.longitude}").\n`;
+      if (node.demand) {
+        aspFacts += `demand(${nodeName}, ${node.demand}).\n`;
+      }
+    });
 
-    if (!processedNodes.has(nodeName)) {
-      processedNodes.add(nodeName);
-    }
-
-    // Convert latitude and longitude to strings
-    const latitude = `"${node.latitude}"`;
-    const longitude = `"${node.longitude}"`;
-
-    // Generate ASP facts
-    aspFacts += `node(${nodeName}).\n`;
-    aspFacts += `latitude(${nodeName}, ${latitude}).\n`;
-    aspFacts += `longitude(${nodeName}, ${longitude}).\n`;
-    if (node.demand) {
-      aspFacts += `demand(${nodeName}, ${node.demand}).\n`;
-    }
-  });
-
-
-    // (b) vehicle(...)
+    // Generate vehicle facts
     vehicles.forEach((v) => {
-      let vehicleID = transliterate(v.vehicleName || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9_]+/g, '');
+      let vehicleID = transliterate(v.vehicleName || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
       if (!vehicleID.match(/^[a-z]/)) {
         vehicleID = 'vehicle_' + vehicleID;
       }
-
       aspFacts += `vehicle(${vehicleID}).\n`;
-      if (v.capacity) {
-        aspFacts += `capacity(${vehicleID}, ${v.capacity}).\n`;
+      for (const key in v) {
+        if (v[key] !== null && v[key] !== undefined) {
+          aspFacts += `${key}(${vehicleID}, ${typeof v[key] === 'string' ? `"${v[key]}"` : v[key]}).\n`;
+        }
       }
     });
 
-    // (c) distance(A,B,C) via Haversine
+    // Generate distance facts
     const allDistances = computeAllDistances(nodes);
     allDistances.forEach((dist) => {
-      let fromName = transliterate(dist.from || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9_]+/g, '');
-      if (!fromName.match(/^[a-z]/)) {
-        fromName = 'unknown';
-      }
-
-      let toName = transliterate(dist.to || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9_]+/g, '');
-      if (!toName.match(/^[a-z]/)) {
-        toName = 'unknown';
-      }
-
+      let fromName = transliterate(dist.from || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
+      let toName = transliterate(dist.to || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
       aspFacts += `distance(${fromName}, ${toName}, ${dist.distance}).\n`;
     });
 
-    return res.type('text/plain').send(aspFacts);
+    res.type('text/plain').send(aspFacts);
   } catch (err) {
     console.error('Error building ASP facts:', err);
     res.status(500).send('Error building ASP facts');
   }
 });
+
 
 router.get('/runPythonScript', (req, res) => {
   try {
