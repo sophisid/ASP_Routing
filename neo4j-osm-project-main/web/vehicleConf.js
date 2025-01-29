@@ -29,7 +29,7 @@ export async function fetchAllDropdownOptions() {
     const queries = {
       models:             "MATCH (c:cars) RETURN DISTINCT c.model AS value",
       transmissions:      "MATCH (c:cars) RETURN DISTINCT c.transmission AS value",
-      drives:             "MATCH (c:cars) RETURN DISTINCT c.drive AS value",
+      drives:             "MATCH (c:cars) RETURN DISTINCT c.drive_type AS value",
       fuels:              "MATCH (c:cars) RETURN DISTINCT c.fuel AS value",
       stnds:              "MATCH (c:cars) RETURN DISTINCT c.stnd AS value",
       veh_classes:        "MATCH (c:cars) RETURN DISTINCT c.veh_class AS value",
