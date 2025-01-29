@@ -6,6 +6,7 @@
     "start": "node mainServer.mjs"
   },
   "dependencies": {
-    "@mapbox/polyline": "^1.2.1"
+    "@mapbox/polyline": "^1.2.1",
+    "polyline": "^0.2.0"
   }
 }

@@ -1,6 +1,8 @@
 % Score
 weight_duration(2). % Weight for duration
 weight_distance(1). % Weight for distance
+weight_elevation_gain(1).   % Penalty for uphill routes
+weight_elevation_loss(-0.5) % bonus for downhill
 penalty_air_pollution(-1). % Penalty for air pollution score
 bonus_smartway_elite(10). % Bonus for "ELITE" smartway vehicles
 
