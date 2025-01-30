@@ -508,6 +508,20 @@ router.get('/loadVehicles', async (req, res) => {
   }
 });
 
+
+/**
+ * 2. Convert an encoded 2D polyline to a GeoJSON LineString in [lon, lat] order.
+ */
+function polylineToGeojsonLineString(encodedPolyline) {
+  const decoded = polylineLib.decode(encodedPolyline); // Decode polyline into array
+  if (decoded.length < 2) {
+    console.error("🚨 Polyline decoded to less than 2 points:", decoded);
+  }
+  return {
+    type: "LineString",
+    coordinates: decoded.map(([lat, lon]) => [lon, lat]) // Convert to GeoJSON format
+  };
+}
 // ----------------------------------------------------------
 // 3) /getOurRoutes -> OpenRouteService
 // ----------------------------------------------------------
@@ -599,6 +613,40 @@ router.post('/getOurRoutes', async (req, res) => {
   }
 });
 
+/**
+ * 7. Process a single route:
+ *    - decode geometry => GeoJSON => fetch elevation => compute stats => return route data
+ */
+async function processSingleRoute(route, orsKey) {
+  const encoded2D = route.geometry;
+  // convert 2D polyline => GeoJSON linestring
+  const geoLine = polylineToGeojsonLineString(encoded2D);
+  // fetch 3D data
+  const elevationResult = await fetchElevationLine(geoLine, orsKey);
+  const coords3D = elevationResult.geometry.coordinates;
+  const { totalElevationGain, totalElevationLoss } = computeElevationStats(coords3D);
+  // placeholders
+  const totalStops = (route.way_points.length || 2) - 2;
+  const tollwayDistance = 0;
+
+  return {
+    distance: route.summary.distance,
+    duration: route.summary.duration,
+    geometry: route.geometry,
+    instructions: route.segments.flatMap((seg) =>
+      seg.steps.map((step) => ({
+        instruction: step.instruction,
+        distance: step.distance,
+        duration: step.duration,
+      }))
+    ),
+    totalStops: totalStops,
+    tollwayDistance: tollwayDistance,
+    elevationGain: totalElevationGain, 
+    elevationLoss: totalElevationLoss,
+  };
+}
+
 // Helper for analyzing routes (if you want it separately)
 async function fetchAndAnalyzeRoutes(locations, configObj) {
   if (!locations || locations.length < 2) {
@@ -609,16 +657,17 @@ async function fetchAndAnalyzeRoutes(locations, configObj) {
     coordinates: locations,
     format: 'json',
     instructions: true,
+    elevation: true,
   };
   if (locations.length === 2) {
     payloadObj.alternative_routes = {
-      target_count: 10,
+      target_count: 3,
       share_factor: 0.6,
       weight_factor: 1.2,
     };
   }
   const payload = JSON.stringify(payloadObj);
-
+  const myConfigObj = { ORS_Key: "5b3ce3597851110001cf624853b2f7dc05e44b6e89a90eea9f3d135e"};
   const options = {
     hostname: 'api.openrouteservice.org',
     path: '/v2/directions/driving-car',
@@ -626,7 +675,7 @@ async function fetchAndAnalyzeRoutes(locations, configObj) {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Content-Length': Buffer.byteLength(payload),
-      Authorization: configObj.ORS_Key,
+      Authorization: myConfigObj.ORS_Key,
     },
   };
 
@@ -658,19 +707,18 @@ async function fetchAndAnalyzeRoutes(locations, configObj) {
     });
 
     const { routes } = orsResponse;
-    const analyzed = routes.map((route, index) => {
-      // decode polyline if needed
-      const decoded = polylineLib.decode(route.geometry);
-      // metrics
-      const totalStops = (route.way_points.length || 2) - 2;
-      const tollwayDistance = 0;
-      const elevationChanges = { totalElevationGain: 0, totalElevationLoss: 0 };
 
+    const analyzed = await Promise.all(routes.map(async (route, index) => {
+      const singleRoute = await processSingleRoute(route, myConfigObj.ORS_Key);
+      if (!singleRoute) {
+        console.error(`Skipping route ${index} due to missing data.`);
+        return null;
+      }
       return {
         routeIndex: index,
-        distance: route.summary.distance,
-        duration: route.summary.duration,
-        geometry: route.geometry,
+        distance: singleRoute.distance,
+        duration: singleRoute.duration,
+        geometry: singleRoute.geometry,
         instructions: route.segments.flatMap(seg =>
           seg.steps.map(step => ({
             instruction: step.instruction,
@@ -678,12 +726,16 @@ async function fetchAndAnalyzeRoutes(locations, configObj) {
             duration: step.duration,
           }))
         ),
-        totalStops,
-        tollwayDistance,
-        elevationChanges,
+        totalStops: singleRoute.totalStops,
+        tollWayDistance: singleRoute.tollwayDistance,
+        elevationGain: singleRoute.elevationGain,
+        elevationLoss: singleRoute.elevationLoss,
+        
       };
-    });
-    return analyzed;
+    }));
+
+    // ✅ Fix: Filter only valid results
+    return analyzed.filter(route => route !== null);
   } catch (error) {
     console.error('[ERROR] fetchAndAnalyzeRoutes:', error.message);
     throw new Error('Failed to fetch routes with alternatives.');
@@ -742,6 +794,238 @@ router.get('/getRoutes', async (req, res) => {
   }
 });
 
+/**
+ * Fetch a 2D route from ORS Directions (no elevation).
+ * @param {Array<Array<number>>} locations - Array of [longitude, latitude] pairs.
+ * @param {string} orsKey - Your ORS API key.
+ * @returns {Promise<Object>} - The parsed directions response with 2D geometry.
+ */
+function fetch2DDirections(locations, orsKey) {
+  return new Promise((resolve, reject) => {
+    if (!locations || locations.length < 2) {
+      return reject(new Error('At least two locations are required.'));
+    }
+
+    // Request payload: 2D geometry only
+    const payloadObj = {
+      coordinates: locations, // e.g. [ [lon, lat], [lon, lat], ... ]
+      format: 'json',
+      instructions: true,
+    };
+
+    // If exactly 2 points, optionally request alternative routes
+    if (locations.length === 2) {
+      payloadObj.alternative_routes = {
+        target_count: 10,
+        share_factor: 0.6,
+        weight_factor: 1.2,
+      };
+    }
+
+    const payload = JSON.stringify(payloadObj);
+    const options = {
+      hostname: 'api.openrouteservice.org',
+      path: '/v2/directions/driving-car',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        Authorization: orsKey,
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            const json = JSON.parse(data);
+            resolve(json);
+          } catch (err) {
+            reject(new Error('Failed to parse ORS Directions response'));
+          }
+        } else {
+          reject(
+            new Error(
+              `Directions request failed: HTTP ${res.statusCode} - ${data}`
+            )
+          );
+        }
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.write(payload);
+    req.end();
+  });
+}
+
+
+/**
+ * Fetch a 3D linestring from ORS Elevation/line endpoint using a GeoJSON LineString.
+ * @param {Object} geoLine - A GeoJSON LineString in [lon, lat] order.
+ * @param {string} orsKey - Your ORS API key.
+ * @returns {Promise<Object>} - The Elevation API response with 3D geometry.
+ */
+function fetchElevationLine(geoLine, orsKey) {
+  return new Promise((resolve, reject) => {
+    const payloadObj = {
+      format_in: 'geojson',
+      format_out: 'geojson',
+      geometry: geoLine,
+    };
+
+    const payload = JSON.stringify(payloadObj);
+    const options = {
+      hostname: 'api.openrouteservice.org',
+      path: '/elevation/line',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        Authorization: orsKey,
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            const json = JSON.parse(data);
+            resolve(json);
+          } catch (err) {
+            reject(new Error('Failed to parse ORS Elevation response'));
+          }
+        } else {
+          reject(
+            new Error(`Elevation request failed: HTTP ${res.statusCode} - ${data}`)
+          );
+        }
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.write(payload);
+    req.end();
+  });
+}
+
+/**
+ * Compute total elevation gain and loss from a 3D linestring.
+ * @param {Array<Array<number>>} coords3D - Array of [lon, lat, elev].
+ * @returns {{ totalElevationGain: number, totalElevationLoss: number }}
+ */
+function computeElevationStats(coords3D) {
+  let totalElevationGain = 0;
+  let totalElevationLoss = 0;
+  for (let i = 1; i < coords3D.length; i++) {
+    const prevElev = coords3D[i - 1][2] || 0;
+    const currElev = coords3D[i][2] || 0;
+    const diff = currElev - prevElev;
+    if (diff > 0) {
+      totalElevationGain += diff;
+    } else {
+      totalElevationLoss += Math.abs(diff);
+    }
+  }
+  return { totalElevationGain, totalElevationLoss };
+}
+
+/** 
+* For one pair of points, fetch route + elevation + stats.
+* @param {Array<Array<number>>} pair - [ [lon1, lat1], [lon2, lat2] ]
+* @param {string} orsKey
+* @returns {Promise<Object>} 
+*/
+async function fetchRouteWithElevationForPair(pair, orsKey) {
+ // 1) fetch directions (2D)
+ const directionsData = await fetch2DDirections(pair, orsKey);
+ if (!directionsData.routes || directionsData.routes.length === 0) {
+   return null; // or throw new Error('No routes found')
+ }
+
+ // Take first route for simplicity
+ const route = directionsData.routes[0];
+
+ // 2) build GeoJSON for elevation
+ const geoLine = polylineToGeojsonLineString(route.geometry);
+
+ // 3) get 3D from elevation
+ const elevationRes = await fetchElevationLine(geoLine, orsKey);
+ if (!elevationResult || !elevationResult.geometry || !elevationResult.geometry.coordinates) {
+  console.error('Failed to fetch elevation data:', elevationResult);
+  return null;
+}
+ const coords3D = elevationRes.geometry.coordinates;
+
+ // 4) compute stats
+ const { totalElevationGain, totalElevationLoss } = computeElevationStats(coords3D);
+
+ return {
+   distance: route.summary.distance,
+   duration: route.summary.duration,
+   instructions: route.segments.flatMap((seg) =>
+     seg.steps.map((step) => ({
+       instruction: step.instruction,
+       distance: step.distance,
+       duration: step.duration,
+     }))
+   ),
+   elevationChanges: { totalElevationGain, totalElevationLoss },
+   geometry: route.geometry,
+ };
+}
+
+/**
+ * Generate all unique 2-point pairs from an array.
+ * e.g., [p1, p2, p3] => [[p1, p2], [p1, p3], [p2, p3]]
+ */
+function generatePairs(points) {
+  const pairs = [];
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      pairs.push([points[i], points[j]]);
+    }
+  }
+  return pairs;
+}
+
+
+/**
+ * Given an array of points, generate all 2-sets, fetch route + elevation for each pair.
+ * @param {Array<Array<number>>} points - array of [lon, lat]
+ * @param {string} orsKey
+ * @returns {Promise<Array<Object>>} array of results, each containing { pair, routeData }
+ */
+async function fetchAllPairRoutesWithElevation(points, orsKey) {
+  const pairs = generatePairs(points); // produce all [p1, p2]
+  
+  const promises = pairs.map(async (pair) => {
+    const routeData = await fetchRouteWithElevationForPair(pair, orsKey);
+    return {
+      pair,
+      routeData,
+    };
+  });
+
+  return Promise.all(promises);
+}
+
+
+function coordToNodeName([lon, lat]) {
+  // Or do something more robust (like rounding or hashing)
+  let name = `pt_${lon.toFixed(4)}_${lat.toFixed(4)}`;
+  return name.toLowerCase().replace(/[^a-z0-9_]+/g, '');
+}
+
+function sanitizeAspString(str) {
+  return str.replace(/"/g, '\\"'); 
+}
+
+
 // ----------------------------------------------------------
 // 5) /retrieveASPrules - Build ASP facts
 // ----------------------------------------------------------
@@ -751,13 +1035,20 @@ router.get('/retrieveASPrules', async (req, res) => {
     const vehiclesFilters = await getVehicleFilters();
     const vehicles = await mergeVehiclesFromNeo4j(vehiclesFilters);
     let aspFacts = '';
-
+    let j = 0;
     // Generate node facts
     nodes.forEach((node) => {
-      let nodeName = transliterate(node.name || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
+      let nodeName = transliterate(node.name || '').toLowerCase().replace(/[^a-z0-9_\'\"]+/g, '');
       if (!nodeName.match(/^[a-z]/)) {
         nodeName = 'node_' + nodeName;
       }
+      console.log('index is --> ', j);
+      // if its the index is 0
+      if (j === 0) {
+        aspFacts += `start_node(${nodeName}).\n`;
+      }
+      j++;
+
       aspFacts += `node(${nodeName}).\n`;
       aspFacts += `latitude(${nodeName}, "${node.latitude}").\n`;
       aspFacts += `longitude(${nodeName}, "${node.longitude}").\n`;
@@ -765,20 +1056,98 @@ router.get('/retrieveASPrules', async (req, res) => {
         aspFacts += `demand(${nodeName}, ${node.demand}).\n`;
       }
     });
-
+    let i = 0;
     // Generate vehicle facts
     vehicles.forEach((v) => {
-      let vehicleID = transliterate(v.vehicleName || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
-      if (!vehicleID.match(/^[a-z]/)) {
-        vehicleID = 'vehicle_' + vehicleID;
-      }
-      aspFacts += `vehicle(${vehicleID}).\n`;
-      for (const key in v) {
-        if (v[key] !== null && v[key] !== undefined) {
-          aspFacts += `${key}(${vehicleID}, ${typeof v[key] === 'string' ? `"${v[key]}"` : v[key]}).\n`;
+        let vehicleID = 'vehicle_' + i++;
+        aspFacts += `vehicle(${vehicleID}).\n`;
+
+        for (const key in v) {
+            if (v[key] !== null && v[key] !== undefined) {
+                if (typeof v[key] === 'string') {
+                    let keyC = sanitizeAspString(v[key]);  // Ensure the string is sanitized
+                    aspFacts += `${key}(${vehicleID}, "${keyC}").\n`;
+                } else if (typeof v[key] === 'number') {
+                    // Check if the number is a float (i.e., has decimals)
+                    if (v[key] % 1 !== 0) {
+                        let roundNum = Math.round(v[key]);  // Round float to nearest integer
+                        aspFacts += `${key}(${vehicleID}, ${roundNum}).\n`;
+                    } else {
+                        aspFacts += `${key}(${vehicleID}, ${v[key]}).\n`;  // Keep integer as is
+                    }
+                } else {
+                    aspFacts += `${key}(${vehicleID}, ${v[key]}).\n`;  // Handle other types safely
+                }
+            }
         }
-      }
     });
+
+
+    const addNumericFact = (predicate, ...args) => {
+      aspFacts += `${predicate}(${args.join(', ')}).
+`;
+    };
+
+
+    const locations = nodes.map((node) => [node.longitude, node.latitude]);
+
+    const pairs = generatePairs(locations);
+    const allRoutes = [];
+    const config1 = {ORS_key: config.ORS_Key};
+    for (const pair of pairs) {
+      const routes = await fetchAndAnalyzeRoutes(pair, config1);
+      // Now 'routes' is an array of route objects 
+      // but we also want to store the 'pair'
+      routes.forEach((r) => {
+        allRoutes.push({
+          fromCoord: pair[0],
+          toCoord: pair[1],
+          routeData: r,
+        });
+      });
+    }
+
+    const alpha = 1.0;  // Weight for distance
+    const beta = 1.0;   // Weight for time
+    const gammaUp = 1.0;  // Weight for elevation gain
+    const gammaDown = 0.5;  // Weight for elevation loss (less impact)
+
+    allRoutes.forEach((route, index) => {
+      const {routeData} = route;
+      const routeId = `r${index + 1}`;
+
+      const fromNode = coordToNodeName(route.fromCoord);
+      const toNode = coordToNodeName(route.toCoord);
+
+      const distance = Math.round(routeData.distance) ?? 0;
+      const duration = Math.round(routeData.duration) ?? 0;
+      const elevationGain = routeData.elevationGain;
+      const elevationLoss = routeData.elevationLoss;
+      const totalStops = routeData.totalStops ?? 0;
+
+      const cost = (alpha * distance) + (beta * duration) + 
+      (gammaUp * elevationGain) - (gammaDown * elevationLoss);
+      
+      let roundedCost = Math.round(cost);
+
+      aspFacts += `routeEdge(${routeId}, ${fromNode}, ${toNode}).\n`;
+      addNumericFact('route', routeId);
+      addNumericFact('time', routeId, duration);
+      addNumericFact('total_stops', routeId, totalStops);
+      addNumericFact('elevation_gain', routeId, elevationGain);
+      addNumericFact('elevation_loss', routeId, elevationLoss);
+      addNumericFact('cost', routeId, roundedCost, fromNode, toNode); 
+      aspFacts += `cycle(${fromNode}, ${toNode}).\n`;
+      // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${fromNode}).\n`;
+      // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${toNode}).\n`;
+      // aspFacts += `reached(${toNode}) :- cycle(1,${toNode}).`;
+      // aspFacts += `reached(${toNode}) :- cycle(${fromNode},${toNode}), reached(${fromNode}).`;
+      // aspFacts += `:- node(${toNode}), not reached(${toNode}).`;
+      // aspFacts += `#minimize{${cost},${fromNode},${toNode}: cycle(${fromNode},${toNode})}, cost(${routeId},${fromNode},${toNode}, ${cost}).\n`;
+    });
+
+
+
 
     // Generate distance facts
     const allDistances = computeAllDistances(nodes);

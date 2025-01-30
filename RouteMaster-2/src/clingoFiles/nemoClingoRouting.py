@@ -16,19 +16,19 @@ def run_clingo(main_lp_file):
     asp_facts = fetch_asp_facts()
 
     # 2. Write them to a temp file
-    with open("tempFacts.lp", "w") as f:
+    with open("tempFacts.pl", "w") as f:
         f.write(asp_facts)
 
     # 3. Run Clingo
     cmd = [
         "clingo",
-        main_lp_file,  # e.g., "nemoRouting4AdoXX.lp"
-        "tempFacts.lp",
+        main_lp_file,  # e.g., "nemoRouting4AdoXX.pl"
+        "tempFacts.pl",
         "--opt-mode=optN",
         "--quiet=1,2"
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    # if result.returncode != 0:
+    # if result.returnco    de != 0:
     #     raise Exception(f"Clingo error: {result.stderr}")
 
     return result.stdout
