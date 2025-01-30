@@ -1021,6 +1021,10 @@ function coordToNodeName([lon, lat]) {
   return name.toLowerCase().replace(/[^a-z0-9_]+/g, '');
 }
 
+function sanitizeAspString(str) {
+  return str.replace(/"/g, '\\"'); 
+}
+
 
 // ----------------------------------------------------------
 // 5) /retrieveASPrules - Build ASP facts
@@ -1034,7 +1038,7 @@ router.get('/retrieveASPrules', async (req, res) => {
 
     // Generate node facts
     nodes.forEach((node) => {
-      let nodeName = transliterate(node.name || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
+      let nodeName = transliterate(node.name || '').toLowerCase().replace(/[^a-z0-9_\'\"]+/g, '');
       if (!nodeName.match(/^[a-z]/)) {
         nodeName = 'node_' + nodeName;
       }
@@ -1056,8 +1060,23 @@ router.get('/retrieveASPrules', async (req, res) => {
       let vehicleID = 'vehicle_' + i++;
       aspFacts += `vehicle(${vehicleID}).\n`;
       for (const key in v) {
+
         if (v[key] !== null && v[key] !== undefined) {
-          aspFacts += `${key}(${vehicleID}, ${typeof v[key] === 'string' ? `"${v[key]}"` : v[key]}).\n`;
+         
+          if (typeof v[key] == 'string'){
+            let keyC = sanitizeAspString(v[key]);
+            aspFacts += `${key}(${vehicleID}, ${`"${keyC}"`}).\n`;
+
+          }else{
+            if(typeof v[key] === 'float' || typeof v[key] === 'double'  || 
+              typeof v[key] === 'number'){
+              let roundNum = Math.round(v[key]);
+                aspFacts += `${key}(${vehicleID}, ${roundNum}).\n`;
+              }else{
+                aspFacts += `${key}(${vehicleID}, ${v[key]}).\n`;
+
+              }
+          }
         }
       }
     });
@@ -1098,15 +1117,16 @@ router.get('/retrieveASPrules', async (req, res) => {
       const fromNode = coordToNodeName(route.fromCoord);
       const toNode = coordToNodeName(route.toCoord);
 
-      const distance = routeData.distance ?? 0;
-      const duration = routeData.duration ?? 0;
+      const distance = Math.round(routeData.distance) ?? 0;
+      const duration = Math.round(routeData.duration) ?? 0;
       const elevationGain = routeData.elevationGain;
       const elevationLoss = routeData.elevationLoss;
       const totalStops = routeData.totalStops ?? 0;
 
       const cost = (alpha * distance) + (beta * duration) + 
       (gammaUp * elevationGain) - (gammaDown * elevationLoss);
-
+      
+      let roundedCost = Math.round(cost);
 
       aspFacts += `routeEdge(${routeId}, ${fromNode}, ${toNode}).\n`;
       addNumericFact('route', routeId);
@@ -1114,7 +1134,7 @@ router.get('/retrieveASPrules', async (req, res) => {
       addNumericFact('total_stops', routeId, totalStops);
       addNumericFact('elevation_gain', routeId, elevationGain);
       addNumericFact('elevation_loss', routeId, elevationLoss);
-      addNumericFact('cost', routeId, cost, fromNode, toNode); 
+      addNumericFact('cost', routeId, roundedCost, fromNode, toNode); 
       aspFacts += `cycle(${fromNode}, ${toNode}).\n`;
       // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${fromNode}).\n`;
       // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${toNode}).\n`;
