@@ -1145,6 +1145,39 @@ router.get('/retrieveASPrules', async (req, res) => {
       // aspFacts += `:- node(${toNode}), not reached(${toNode}).`;
       // aspFacts += `#minimize{${cost},${fromNode},${toNode}: cycle(${fromNode},${toNode})}, cost(${routeId},${fromNode},${toNode}, ${cost}).\n`;
     });
+    //  allRoutes.forEach((route, index) => {
+    //   const {routeData} = route;
+    //   const routeId = `r${index + 1}`;
+
+    //   const fromNode = coordToNodeName(route.toCoord);
+    //   const toNode = coordToNodeName(route.fromCoord);
+
+    //   const distance = Math.round(routeData.distance) ?? 0;
+    //   const duration = Math.round(routeData.duration) ?? 0;
+    //   const elevationGain = routeData.elevationLoss;
+    //   const elevationLoss = routeData.elevationGain;
+    //   const totalStops = routeData.totalStops ?? 0;
+
+    //   const cost = (alpha * distance) + (beta * duration) + 
+    //   (gammaUp * elevationGain) - (gammaDown * elevationLoss);
+      
+    //   let roundedCost = Math.round(cost);
+
+    //   aspFacts += `routeEdge(${routeId}, ${fromNode}, ${toNode}).\n`;
+    //   addNumericFact('route', routeId);
+    //   addNumericFact('time', routeId, duration);
+    //   addNumericFact('total_stops', routeId, totalStops);
+    //   addNumericFact('elevation_gain', routeId, elevationGain);
+    //   addNumericFact('elevation_loss', routeId, elevationLoss);
+    //   addNumericFact('cost', routeId, roundedCost, fromNode, toNode); 
+    //   aspFacts += `cycle(${fromNode}, ${toNode}).\n`;
+    //   // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${fromNode}).\n`;
+    //   // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${toNode}).\n`;
+    //   // aspFacts += `reached(${toNode}) :- cycle(1,${toNode}).`;
+    //   // aspFacts += `reached(${toNode}) :- cycle(${fromNode},${toNode}), reached(${fromNode}).`;
+    //   // aspFacts += `:- node(${toNode}), not reached(${toNode}).`;
+    //   // aspFacts += `#minimize{${cost},${fromNode},${toNode}: cycle(${fromNode},${toNode})}, cost(${routeId},${fromNode},${toNode}, ${cost}).\n`;
+    // });
 
 
 
