@@ -1035,17 +1035,19 @@ router.get('/retrieveASPrules', async (req, res) => {
     const vehiclesFilters = await getVehicleFilters();
     const vehicles = await mergeVehiclesFromNeo4j(vehiclesFilters);
     let aspFacts = '';
-
+    let j = 0;
     // Generate node facts
     nodes.forEach((node) => {
       let nodeName = transliterate(node.name || '').toLowerCase().replace(/[^a-z0-9_\'\"]+/g, '');
       if (!nodeName.match(/^[a-z]/)) {
         nodeName = 'node_' + nodeName;
       }
+      console.log('index is --> ', j);
       // if its the index is 0
-      if (node.index === 0) {
+      if (j === 0) {
         aspFacts += `start_node(${nodeName}).\n`;
       }
+      j++;
 
       aspFacts += `node(${nodeName}).\n`;
       aspFacts += `latitude(${nodeName}, "${node.latitude}").\n`;

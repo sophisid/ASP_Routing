@@ -1,11 +1,12 @@
-node(t1232).
-latitude(t1232, "35.3376482").
-longitude(t1232, "25.1634345").
-demand(t1232, 1).
-node(t123211).
-latitude(t123211, "35.33741123716844").
-longitude(t123211, "25.15886270393185").
-demand(t123211, 1).
+start_node(t5).
+node(t5).
+latitude(t5, "35.337539").
+longitude(t5, "25.1640211").
+demand(t5, 1).
+node(t6).
+latitude(t6, "35.3359621096173").
+longitude(t6, "25.156582636766643").
+demand(t6, 1).
 vehicle(vehicle_0).
 drive_type(vehicle_0, "2WD").
 stnd(vehicle_0, "T3B0").
@@ -402,13 +403,29 @@ model(vehicle_21, "AUDI SQ6 e-tron").
 stnd_description(vehicle_21, "Federal Tier 3 Bin 0").
 price_eur(vehicle_21, 46000).
 vehicleID(vehicle_21, 126).
-routeEdge(r1, pt_251634_353376, pt_251589_353374).
+routeEdge(r1, pt_251640_353375, pt_251566_353360).
 route(r1).
-time(r1, 67).
+time(r1, 141).
 total_stops(r1, 0).
-elevation_gain(r1, 0).
-elevation_loss(r1, 0).
-cost(r1, 647, pt_251634_353376, pt_251589_353374).
-cycle(pt_251634_353376, pt_251589_353374).
-distance(t1232, t123211, 416).
-distance(t123211, t1232, 416).
+elevation_gain(r1, 18).
+elevation_loss(r1, 43).
+cost(r1, 1766, pt_251640_353375, pt_251566_353360).
+cycle(pt_251640_353375, pt_251566_353360).
+routeEdge(r2, pt_251640_353375, pt_251566_353360).
+route(r2).
+time(r2, 142).
+total_stops(r2, 0).
+elevation_gain(r2, 0).
+elevation_loss(r2, 0).
+cost(r2, 1208, pt_251640_353375, pt_251566_353360).
+cycle(pt_251640_353375, pt_251566_353360).
+routeEdge(r3, pt_251640_353375, pt_251566_353360).
+route(r3).
+time(r3, 157).
+total_stops(r3, 0).
+elevation_gain(r3, 0).
+elevation_loss(r3, 0).
+cost(r3, 1196, pt_251640_353375, pt_251566_353360).
+cycle(pt_251640_353375, pt_251566_353360).
+distance(t5, t6, 697).
+distance(t6, t5, 697).
