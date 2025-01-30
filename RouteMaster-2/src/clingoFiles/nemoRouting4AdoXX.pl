@@ -2,7 +2,7 @@
 weight_duration(2). % Weight for duration
 weight_distance(1). % Weight for distance
 weight_elevation_gain(2).   % Penalty for uphill routes
-weight_elevation_loss(-1). % bonus for downhill
+weight_elevation_loss(-1). % Bonus for downhill
 penalty_air_pollution(-1). % Penalty for air pollution score
 bonus_smartway_elite(10). % Bonus for "ELITE" smartway vehicles
 
@@ -25,13 +25,11 @@ vehicle_score(V, Total) :-
     hwy_mpg(V, HMPG),
     cmb_mpg(V, CBMPG),
     greenhouse_gas_score(V, GGS),
-    smartway(V, S),
     penalty_air_pollution(PAP),
     bonus_smartway_elite(Bonus),
     is_smartway_elite(V, BonusMultiplier),
     BonusAmount = Bonus * BonusMultiplier,
     Total = APS * PAP + CMPG + HMPG + CBMPG - GGS + BonusAmount.
-
 
 % Maximum vehicle score
 max_vehicle_score(Max) :- Max = #max { Total : vehicle_score(_, Total) }.
@@ -51,7 +49,6 @@ route_score(R, Total) :-
     weight_elevation_loss(WEL),
     Total = WD * T + WDist * D + WEG * EG + WEL * EL.
 
-
 % Best route
 min_route_score(Min) :- Min = #min { Total : route_score(_, Total) }.
 best_route(R) :- route_score(R, Total), min_route_score(Total).
@@ -61,9 +58,8 @@ visit_once(N):- node(N), reached(N).
 start_and_end_at(N):- start_node(N).
 cycle(N, N) :- start_and_end_at(N).
 total_cost(TotalCost) :- 
-  findall(Cost, (cycle(A,B), cost(RouteId, A,B, Cost)), Costs), 
-  sum_list(Costs, TotalCost).
-#minimize{ TotalCost : total_cost(TotalCost) }.
+    TotalCost = #sum { Cost : cycle(A, B), cost(RouteId, A, B, Cost) }.
+#minimize { TotalCost : total_cost(TotalCost) }.
 :- node(N), not reached(N).
 
 reached(To) :- cycle(From, To), reached(From).

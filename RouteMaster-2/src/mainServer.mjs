@@ -1059,29 +1059,29 @@ router.get('/retrieveASPrules', async (req, res) => {
     let i = 0;
     // Generate vehicle facts
     vehicles.forEach((v) => {
-      let vehicleID = 'vehicle_' + i++;
-      aspFacts += `vehicle(${vehicleID}).\n`;
-      for (const key in v) {
+        let vehicleID = 'vehicle_' + i++;
+        aspFacts += `vehicle(${vehicleID}).\n`;
 
-        if (v[key] !== null && v[key] !== undefined) {
-         
-          if (typeof v[key] == 'string'){
-            let keyC = sanitizeAspString(v[key]);
-            aspFacts += `${key}(${vehicleID}, ${`"${keyC}"`}).\n`;
-
-          }else{
-            if(typeof v[key] === 'float' || typeof v[key] === 'double'  || 
-              typeof v[key] === 'number'){
-              let roundNum = Math.round(v[key]);
-                aspFacts += `${key}(${vehicleID}, ${roundNum}).\n`;
-              }else{
-                aspFacts += `${key}(${vehicleID}, ${v[key]}).\n`;
-
-              }
-          }
+        for (const key in v) {
+            if (v[key] !== null && v[key] !== undefined) {
+                if (typeof v[key] === 'string') {
+                    let keyC = sanitizeAspString(v[key]);  // Ensure the string is sanitized
+                    aspFacts += `${key}(${vehicleID}, "${keyC}").\n`;
+                } else if (typeof v[key] === 'number') {
+                    // Check if the number is a float (i.e., has decimals)
+                    if (v[key] % 1 !== 0) {
+                        let roundNum = Math.round(v[key]);  // Round float to nearest integer
+                        aspFacts += `${key}(${vehicleID}, ${roundNum}).\n`;
+                    } else {
+                        aspFacts += `${key}(${vehicleID}, ${v[key]}).\n`;  // Keep integer as is
+                    }
+                } else {
+                    aspFacts += `${key}(${vehicleID}, ${v[key]}).\n`;  // Handle other types safely
+                }
+            }
         }
-      }
     });
+
 
     const addNumericFact = (predicate, ...args) => {
       aspFacts += `${predicate}(${args.join(', ')}).
