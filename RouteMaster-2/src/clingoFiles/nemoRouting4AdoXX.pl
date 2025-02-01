@@ -54,14 +54,10 @@ min_route_score(Min) :- Min = #min { Total : route_score(_, Total) }.
 best_route(R) :- route_score(R, Total), min_route_score(Total).
 
 % TSP problem
-visit_once(N):- node(N), reached(N).
-start_and_end_at(N):- start_node(N).
-cycle(N, N) :- start_and_end_at(N).
-total_cost(TotalCost) :- 
-    TotalCost = #sum { Cost : cycle(A, B), cost(RouteId, A, B, Cost) }.
-#minimize { TotalCost : total_cost(TotalCost) }.
-:- node(N), not reached(N).
 
-reached(To) :- cycle(From, To), reached(From).
-reached(Start) :- start_and_end_at(Start), cycle(Start, _).
-:- cycle(From1, To), cycle(From2, To), not From1 = From2.
+edge(A, B) : cost(_, _, A, B).
+
+node(X) :- cost(_, _, X, _).
+node(Y) :- cost(_, _, _, Y).
+
+1{ cycle(A, B) : routeEdge(_, A, B) }1 :- node(A).

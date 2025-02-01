@@ -5,20 +5,22 @@ import json
 
 def fetch_asp_facts():
     """GET the facts from your Node service."""
+    print("Making request to get asp facts\n");
     url = 'http://localhost:3000/neo4j/retrieveASPrules'
     resp = requests.get(url)
     if resp.status_code != 200:
         raise Exception(f"Failed to fetch ASP facts: {resp.text}")
+    print("Returning response..\n");
     return resp.text
 
 def run_clingo(main_lp_file):
     # 1. Fetch ASP facts from Node
     asp_facts = fetch_asp_facts()
-
+    print("Running facts to temp file..\n");
     # 2. Write them to a temp file
     with open("tempFacts.pl", "w") as f:
         f.write(asp_facts)
-
+    print("Running clingo now..\n");
     # 3. Run Clingo
     cmd = [
         "clingo",
@@ -30,7 +32,7 @@ def run_clingo(main_lp_file):
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     # if result.returnco    de != 0:
     #     raise Exception(f"Clingo error: {result.stderr}")
-
+    print("Runned clingo\n");
     return result.stdout
 
 def parse_clingo_solution(output):
