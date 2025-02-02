@@ -29,7 +29,7 @@ vehicle_score(V, Total) :-
     bonus_smartway_elite(Bonus),
     is_smartway_elite(V, BonusMultiplier),
     BonusAmount = Bonus * BonusMultiplier,
-    Total = APS * PAP + CMPG + HMPG + CBMPG - GGS + BonusAmount.
+    Total = ((-1) * APS * PAP ) + CMPG + HMPG + CBMPG - GGS + BonusAmount.
 
 % Maximum vehicle score
 max_vehicle_score(Max) :- Max = #max { Total : vehicle_score(_, Total) }.
@@ -57,7 +57,17 @@ best_route(R) :- route_score(R, Total), min_route_score(Total).
 
 edge(A, B) : cost(_, _, A, B).
 
-node(X) :- cost(_, _, X, _).
-node(Y) :- cost(_, _, _, Y).
+tsp_node(X) :- cost(_, _, X, _).
+tsp_node(Y) :- cost(_, _, _, Y).
 
-1{ cycle(A, B) : routeEdge(_, A, B) }1 :- node(A).
+1{ cycle(A, B) : routeEdge(_, A, B) }1 :- tsp_node(A).
+
+total_cost(TotalCost) :-
+    TotalCost = #sum { Cost : cycle(A, B), cost(RouteId, Cost, A, B) }.
+
+% Minimize the total cost of the route
+#minimize { TotalCost : total_cost(TotalCost) }.
+
+best_car_and_route(V, R) :-
+    best_vehicle(V),
+    best_route(R).
