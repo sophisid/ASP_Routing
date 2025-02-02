@@ -1131,7 +1131,7 @@ router.get('/retrieveASPrules', async (req, res) => {
       const cost = (alpha * distance) + (beta * duration) + 
       (gammaUp * elevationGain) - (gammaDown * elevationLoss);
       
-      const cost2 = (alpha * distance) + (beta * duration) + 
+      const cost2 = (alpha * distance) + (beta*  duration) + 
       (gammaUp * elevationLoss) - (gammaDown * elevationGain);
 
       let roundedCost = Math.round(cost);
@@ -1144,6 +1144,14 @@ router.get('/retrieveASPrules', async (req, res) => {
       addNumericFact('elevation_gain', routeId, elevationGain);
       addNumericFact('elevation_loss', routeId, elevationLoss);
       addNumericFact('cost', routeId, roundedCost, fromNode, toNode);
+
+       aspFacts += `routeEdge(${routeId2}, ${toNode}, ${fromNode}).\n`;
+      addNumericFact('route', routeId2);
+      addNumericFact('time', routeId2, duration);
+      addNumericFact('total_stops', routeId2, totalStops);
+      addNumericFact('elevation_gain', routeId2, elevationLoss);
+      addNumericFact('elevation_loss', routeId2, elevationGain);
+      addNumericFact('cost', routeId2, roundedCost2, toNode, fromNode);
 
       //aspFacts += `cycle(${fromNode}, ${toNode}).\n`;
       // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${fromNode}).\n`;
@@ -1197,7 +1205,6 @@ router.get('/retrieveASPrules', async (req, res) => {
       let toName = transliterate(dist.to || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
       aspFacts += `distance(${fromName}, ${toName}, ${dist.distance}).\n`;
     });
-
     res.type('text/plain').send(aspFacts);
   } catch (err) {
     console.error('Error building ASP facts:', err);
@@ -1228,7 +1235,7 @@ router.get('/runPythonScript', (req, res) => {
         if (stderr) {
           console.error('Stderr from python script:', stderr);
         }
-        console.log('Python script output:', stdout);
+        // console.log('Python script output:', stdout);
 
         // If your script prints JSON, parse it:
         let routeData;
