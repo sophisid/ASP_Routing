@@ -667,7 +667,7 @@ async function fetchAndAnalyzeRoutes(locations, configObj) {
     };
   }
   const payload = JSON.stringify(payloadObj);
-  const myConfigObj = { ORS_Key: "5b3ce3597851110001cf624853b2f7dc05e44b6e89a90eea9f3d135e"};
+  const myConfigObj = { ORS_Key: "5b3ce3597851110001cf6248ac6c520907eb4dfa85df789d9ba10beb"};
   const options = {
     hostname: 'api.openrouteservice.org',
     path: '/v2/directions/driving-car',
@@ -1093,7 +1093,7 @@ router.get('/retrieveASPrules', async (req, res) => {
 
     const pairs = generatePairs(locations);
     const allRoutes = [];
-    const config1 = {ORS_key: config.ORS_Key};
+    const config1 = {ORS_key : "5b3ce3597851110001cf6248ac6c520907eb4dfa85df789d9ba10beb"};
     for (const pair of pairs) {
       const routes = await fetchAndAnalyzeRoutes(pair, config1);
       // Now 'routes' is an array of route objects 
@@ -1115,7 +1115,10 @@ router.get('/retrieveASPrules', async (req, res) => {
     allRoutes.forEach((route, index) => {
       const {routeData} = route;
       const routeId = `r${index + 1}`;
+      const routeId2 = `r${index + allRoutes.length +1}`;
+      console.log('Created routeid 1 with id -->', routeId, '\n');
 
+      console.log('Created routeid 2 with id -->', routeId2, '\n');
       const fromNode = coordToNodeName(route.fromCoord);
       const toNode = coordToNodeName(route.toCoord);
 
@@ -1128,7 +1131,11 @@ router.get('/retrieveASPrules', async (req, res) => {
       const cost = (alpha * distance) + (beta * duration) + 
       (gammaUp * elevationGain) - (gammaDown * elevationLoss);
       
+      const cost2 = (alpha * distance) + (beta*  duration) + 
+      (gammaUp * elevationLoss) - (gammaDown * elevationGain);
+
       let roundedCost = Math.round(cost);
+      let roundedCost2 = Math.round(cost2);
 
       aspFacts += `routeEdge(${routeId}, ${fromNode}, ${toNode}).\n`;
       addNumericFact('route', routeId);
@@ -1136,8 +1143,17 @@ router.get('/retrieveASPrules', async (req, res) => {
       addNumericFact('total_stops', routeId, totalStops);
       addNumericFact('elevation_gain', routeId, elevationGain);
       addNumericFact('elevation_loss', routeId, elevationLoss);
-      addNumericFact('cost', routeId, roundedCost, fromNode, toNode); 
-      aspFacts += `cycle(${fromNode}, ${toNode}).\n`;
+      addNumericFact('cost', routeId, roundedCost, fromNode, toNode);
+
+       aspFacts += `routeEdge(${routeId2}, ${toNode}, ${fromNode}).\n`;
+      addNumericFact('route', routeId2);
+      addNumericFact('time', routeId2, duration);
+      addNumericFact('total_stops', routeId2, totalStops);
+      addNumericFact('elevation_gain', routeId2, elevationLoss);
+      addNumericFact('elevation_loss', routeId2, elevationGain);
+      addNumericFact('cost', routeId2, roundedCost2, toNode, fromNode);
+
+      //aspFacts += `cycle(${fromNode}, ${toNode}).\n`;
       // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${fromNode}).\n`;
       // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${toNode}).\n`;
       // aspFacts += `reached(${toNode}) :- cycle(1,${toNode}).`;
@@ -1145,6 +1161,39 @@ router.get('/retrieveASPrules', async (req, res) => {
       // aspFacts += `:- node(${toNode}), not reached(${toNode}).`;
       // aspFacts += `#minimize{${cost},${fromNode},${toNode}: cycle(${fromNode},${toNode})}, cost(${routeId},${fromNode},${toNode}, ${cost}).\n`;
     });
+    // allRoutes.forEach((route, index) => {
+    //    const {routeData} = route;
+    //    const routeId = `r${index + 1}`;
+
+    //   const fromNode = coordToNodeName(route.toCoord);
+    //   const toNode = coordToNodeName(route.fromCoord);
+
+    //   const distance = Math.round(routeData.distance) ?? 0;
+    //   const duration = Math.round(routeData.duration) ?? 0;
+    //   const elevationGain = routeData.elevationLoss;
+    //   const elevationLoss = routeData.elevationGain;
+    //   const totalStops = routeData.totalStops ?? 0;
+
+    //   const cost = (alpha * distance) + (beta * duration) + 
+    //   (gammaUp * elevationGain) - (gammaDown * elevationLoss);
+      
+    //   let roundedCost = Math.round(cost);
+
+    //   aspFacts += `routeEdge(${routeId}, ${fromNode}, ${toNode}).\n`;
+    //   addNumericFact('route', routeId);
+    //   addNumericFact('time', routeId, duration);
+    //   addNumericFact('total_stops', routeId, totalStops);
+    //   addNumericFact('elevation_gain', routeId, elevationGain);
+    //   addNumericFact('elevation_loss', routeId, elevationLoss);
+    //   addNumericFact('cost', routeId, roundedCost, fromNode, toNode); 
+    //   aspFacts += `cycle(${fromNode}, ${toNode}).\n`;
+    //   // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${fromNode}).\n`;
+    //   // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${toNode}).\n`;
+    //   // aspFacts += `reached(${toNode}) :- cycle(1,${toNode}).`;
+    //   // aspFacts += `reached(${toNode}) :- cycle(${fromNode},${toNode}), reached(${fromNode}).`;
+    //   // aspFacts += `:- node(${toNode}), not reached(${toNode}).`;
+    //   // aspFacts += `#minimize{${cost},${fromNode},${toNode}: cycle(${fromNode},${toNode})}, cost(${routeId},${fromNode},${toNode}, ${cost}).\n`;
+    // });
 
 
 
@@ -1156,7 +1205,6 @@ router.get('/retrieveASPrules', async (req, res) => {
       let toName = transliterate(dist.to || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
       aspFacts += `distance(${fromName}, ${toName}, ${dist.distance}).\n`;
     });
-
     res.type('text/plain').send(aspFacts);
   } catch (err) {
     console.error('Error building ASP facts:', err);
@@ -1169,12 +1217,14 @@ router.get('/runPythonScript', (req, res) => {
   try {
     const scriptPath = path.join(__dirname, 'clingoFiles', 'nemoClingoRouting.py');
     const lpFilePath = path.join(__dirname, 'clingoFiles', 'nemoRouting4AdoXX.pl');
-
+    console.log("Executing python file..");
     childProcess = execFile(
       'python3',
       [scriptPath, lpFilePath],
       { timeout: 70000 },
       (err, stdout, stderr) => {
+        console.log('running py script..', stdout);
+
         if (err) {
           console.error('Clingo execution error:', err);
           if (err.killed) {
@@ -1185,7 +1235,7 @@ router.get('/runPythonScript', (req, res) => {
         if (stderr) {
           console.error('Stderr from python script:', stderr);
         }
-        console.log('Python script output:', stdout);
+        // console.log('Python script output:', stdout);
 
         // If your script prints JSON, parse it:
         let routeData;
@@ -1195,6 +1245,7 @@ router.get('/runPythonScript', (req, res) => {
           console.error('Could not parse JSON from stdout. Falling back...');
           routeData = [];
         }
+        console.log('Finished executing python file..', stdout);
 
         res.json({ routeData });
       }

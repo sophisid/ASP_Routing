@@ -1,403 +1,545 @@
-import * as config from './configApis/config.js';
-import neo4j from 'neo4j-driver';
 import express from 'express';
+import neo4j from 'neo4j-driver';
 import cors from 'cors';
 import path from 'path';
 import https from 'https';
 import fs from 'fs';
 import { execFile } from 'child_process';
 import { transliterate } from 'inflected';
+import polylineLib from '@mapbox/polyline'; // decode polylines
+
+// If using ES modules, we need these to emulate __dirname
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-let childProcess;
-let processStoppedByUser = false; // Flag to track if the process was stopped intentionally
+// Adjust the path to your config as needed
+import * as config from './configApis/config.js';
 
+// ----------------------------------------------------------
+// Set up Express
+// ----------------------------------------------------------
 const app = express();
-// const router = express.Router();
-
 const port = process.env.PORT || 3000;
 
-app.use(cors({
-  origin: 'http://localhost:3000', // Replace with the correct frontend URL
-  methods: ['GET', 'POST'],       // Allow only certain methods
-  allowedHeaders: ['Content-Type', 'Authorization'], // Restrict allowed headers
-}));
+let childProcess = null;
+let processStoppedByUser = false; // Track if process was stopped
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/neo4j',router);
-
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
-});
-// Function to create a Neo4j driver
+// ----------------------------------------------------------
+// Neo4j Driver
+// ----------------------------------------------------------
 export const driver = neo4j.driver(
   config.neo4jUrl,
   neo4j.auth.basic(config.neo4jUsername, config.neo4jPassword)
 );
 
-/**
- * Check if the Neo4j database is empty.
- * @returns {Promise<boolean>} True if empty, false otherwise.
- */
+// ----------------------------------------------------------
+// Database Check & Populate
+// ----------------------------------------------------------
 async function isDatabaseEmpty() {
+  const session = driver.session({ database: config.neo4jDatabase });
   try {
-    const session = driver.session();
     const query = 'MATCH (n) RETURN count(n) AS node_count';
     const result = await session.run(query);
-    const nodeCount = result.records[0].get('node_count');
-    await session.close();
+    const nodeCount = result.records[0].get('node_count').toNumber();
     return nodeCount === 0;
   } catch (error) {
-    console.error('Error checking database:', error);
+    console.error('[ERROR] Checking DB empty:', error);
     throw error;
+  } finally {
+    await session.close();
   }
 }
 
-/**
- * Run the Python script to populate the Neo4j database.
- * @returns {Promise<void>} Resolves when the script completes.
- */
 function populateDatabase() {
   return new Promise((resolve, reject) => {
-    const pythonScriptPath = path.join(__dirname, 'load_neo4j.py');
+    const pythonScriptPath = path.join(__dirname, '..', '..', 'initcars', 'load_neo4j.py');
     execFile('python3', [pythonScriptPath], (err, stdout, stderr) => {
       if (err) {
-        console.error('Error running Python script:', err);
-        reject(err);
-        return;
+        console.error('[ERROR] Running Python script:', err);
+        return reject(err);
       }
       if (stderr) {
-        console.error('Python script stderr:', stderr);
+        console.error('[ERROR] Python script stderr:', stderr);
       }
-      console.log('Python script output:', stdout);
+      console.log('[INFO] Python script output:', stdout);
       resolve();
     });
   });
 }
 
-/**
- * Middleware to check if the database is empty and populate it if necessary.
- */
 async function checkAndPopulateDatabase(req, res, next) {
   try {
-    console.log('Checking if the database is empty...');
-    const isEmpty = await isDatabaseEmpty();
-    if (isEmpty) {
-      console.log('Database is empty. Populating...');
+    console.log('[INFO] Checking if DB is empty...');
+    const empty = await isDatabaseEmpty();
+    if (empty) {
+      console.log('[INFO] DB is empty. Populating...');
       await populateDatabase();
-      console.log('Database populated successfully.');
+      console.log('[INFO] DB populated successfully.');
     } else {
-      console.log('Database is not empty. Skipping population.');
+      console.log('[INFO] DB is not empty. Skipping populate.');
     }
     next();
   } catch (error) {
-    console.error('Error during database check and population:', error);
-    res.status(500).send('Internal server error during database initialization.');
+    console.error('[ERROR] During DB check/population:', error);
+    res.status(500).send('Internal server error during DB initialization.');
   }
 }
 
-// Use the middleware for all routes
-app.use(checkAndPopulateDatabase);
-
-// Middleware setup
-const publicPath = path.join(__dirname, '..', 'public');
-
-app.use(cors());
+// ----------------------------------------------------------
+// Middleware
+// ----------------------------------------------------------
+app.use(
+  cors({
+    origin: '*', // or a specific origin array
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
 app.use(express.json());
-// Serve static files from the 'public' directory
+
+// If your static frontend is in `../../frontend`
+const publicPath = path.join(__dirname, '..', '..', 'frontend');
 app.use(express.static(publicPath));
 
-// Define route to serve the homepage
+// Use the optional DB-check middleware
+app.use(checkAndPopulateDatabase);
+
+// Serve main pages
 app.get('/', (req, res) => {
-  res.sendFile(path.join(publicPath, 'frontend', 'homePage.html'));
+  res.sendFile(path.join(publicPath, 'homePage.html'));
 });
-
-// Define route to serve the main page
 app.get('/mainPage.html', (req, res) => {
-  // if `web` is not defined, fix as necessary
-  const mainPagePath = path.join(publicPath, 'frontend', 'mainPage.html');
-  res.sendFile(mainPagePath);
+  res.sendFile(path.join(publicPath, 'mainPage.html'));
 });
 
-// -----------------------------------------------------------------------------------
-// Helpers used by route logic
-const simplifyRouteData = (data) => {
-  const vehicles = {};
-  const vehiclesStartEnd = {};
+// ----------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------
+function deg2rad(deg) {
+  return deg * (Math.PI / 180);
+}
 
-  console.log('-------------------------------------\nBEFORE DATA SIMPLIFICATION:\n', data);
+function computeHaversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // radius in meters
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(deg2rad(lat1)) *
+      Math.cos(deg2rad(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
-  data.forEach((entry) => {
-    const vehicleName = entry.nodeA.vehicleName;
-
-    if (!vehicles[vehicleName] && vehicleName !== undefined) {
-      vehicles[vehicleName] = [];
+function computeAllDistances(stops) {
+  const distances = [];
+  for (let i = 0; i < stops.length; i++) {
+    for (let j = i + 1; j < stops.length; j++) {
+      const A = stops[i];
+      const B = stops[j];
+      const distMeters = computeHaversineDistance(
+        A.latitude,
+        A.longitude,
+        B.latitude,
+        B.longitude
+      );
+      const distRounded = Math.round(distMeters);
+      distances.push({ from: A.name, to: B.name, distance: distRounded });
+      distances.push({ from: B.name, to: A.name, distance: distRounded });
     }
-    if (!vehiclesStartEnd[vehicleName]) {
-      vehiclesStartEnd[vehicleName] = {};
-    }
+  }
+  return distances;
+}
 
-    if (entry.relationshipType === 'START_TO_ROUTE') {
-      vehiclesStartEnd[entry.nodeB.vehicleName] = {
-        ...vehiclesStartEnd[entry.nodeB.vehicleName],
-        routeStartName: entry.nodeA.name,
-      };
-      if (entry.nodeA.name === entry.nodeB.name) {
-        vehiclesStartEnd[entry.nodeB.vehicleName] = {
-          ...vehiclesStartEnd[entry.nodeB.vehicleName],
-          routeStartServed: true
-        };
-      } else {
-        vehiclesStartEnd[entry.nodeB.vehicleName] = {
-          ...vehiclesStartEnd[entry.nodeB.vehicleName],
-          routeStartServed: false
-        };
-      }
-    } else if (entry.relationshipType === 'ROUTE_TO_END') {
-      vehiclesStartEnd[entry.nodeA.vehicleName] = {
-        ...vehiclesStartEnd[entry.nodeA.vehicleName],
-        routeEndName: entry.nodeB.name,
-        routeEnd: {
-          name: entry.nodeB.name,
-          latitude: entry.nodeB.latitude,
-          longitude: entry.nodeB.longitude
-        }
-      };
-      if (entry.nodeA.name === entry.nodeB.name) {
-        vehiclesStartEnd[entry.nodeA.vehicleName] = {
-          ...vehiclesStartEnd[entry.nodeA.vehicleName],
-          routeEndServed: true
-        };
-      } else {
-        vehiclesStartEnd[entry.nodeA.vehicleName] = {
-          ...vehiclesStartEnd[entry.nodeA.vehicleName],
-          routeEndServed: false
-        };
-      }
-    } else {
-      // check if a stop with the same name already exists
-      const stopExists = (vehicle, stopName) => {
-        return vehicle.some((stop) => stop.name === stopName);
-      };
-      // Add nodeA if it doesn't already exist
-      if (!stopExists(vehicles[vehicleName], entry.nodeA.name)) {
-        vehicles[vehicleName].push({
-          name: entry.nodeA.name,
-          latitude: entry.nodeA.latitude,
-          longitude: entry.nodeA.longitude
-        });
-      }
-      // Add nodeB if it doesn't already exist and is different from nodeA
-      if (
-        entry.nodeA.name !== entry.nodeB.name &&
-        !stopExists(vehicles[vehicleName], entry.nodeB.name)
-      ) {
-        vehicles[vehicleName].push({
-          name: entry.nodeB.name,
-          latitude: entry.nodeB.latitude,
-          longitude: entry.nodeB.longitude
-        });
-      }
-    }
-  });
-
-  Object.keys(vehicles).map((vehicleName) => {
-    console.log(
-      '----------------------------vehicles---------------------------',
-      vehicleName,
-      '\n',
-      vehicles[vehicleName]
-    );
-
-    if (!vehiclesStartEnd[vehicleName]) {
-      return vehicles; // skip if no start/end data for this vehicle
-    }
-    console.log('vehicles[vehicleName][0].name:\t', vehicles[vehicleName][0].name);
-
-    // Add the routeStart at the beginning if not first stop as well
-    if (
-      vehicles[vehicleName].length > 0 &&
-      vehicles[vehicleName][0].name !== vehiclesStartEnd[vehicleName].routeStartName
-    ) {
-      vehicles[vehicleName].unshift(vehiclesStartEnd[vehicleName].routeStart);
-    }
-
-    let lastEntry = vehicles[vehicleName][vehicles[vehicleName].length - 1];
-    if (lastEntry.name !== vehiclesStartEnd[vehicleName].routeEndName) {
-      vehicles[vehicleName].push(vehiclesStartEnd[vehicleName].routeEnd);
-    }
-  });
-
-  const simplifiedData = Object.keys(vehicles).map((vehicleName) => ({
-    vehicleName,
-    stops: vehicles[vehicleName]
-  }));
-
-  return simplifiedData;
-};
-
-const logRouteName = (req, res, next) => {
+// Log route names
+function logRouteName(req, res, next) {
   if (req.path !== '/favicon.ico') {
-    // avoid double logging
-    console.log(
-      `-----------------------------------------------------------------------------------------------------------------\n-------> ROUTE: ${req.path}\t\t${new Date().toString()}`
-    );
+    console.log(`\n-------------------------------------`);
+    console.log(`ROUTE: ${req.path}  ${new Date().toString()}`);
   }
   next();
-};
+}
 
-const sortMatrix = (matrix) => {
-  return matrix.sort((a, b) => {
-    if (a[0] < b[0]) return -1;
-    if (a[0] > b[0]) return 1;
-    if (parseInt(a[2], 10) < parseInt(b[2], 10)) return -1;
-    if (parseInt(a[2], 10) > parseInt(b[2], 10)) return 1;
-    return 0;
-  });
-};
-
-const groupMatrixByVehicle = (matrix) => {
-  return matrix.reduce((acc, row) => {
-    const vehicle = row[0];
-    if (!acc[vehicle]) {
-      acc[vehicle] = [];
-    }
-    acc[vehicle].push(row);
-    return acc;
-  }, {});
-};
-
-// extract the matrix of the optimal answer set from the clingo results and sort it by vehicle and timepoint
-const extractMatrixFromClingoAS = (output) => {
-  const match = output.match(/Optimal:\s+True\s+([\s\S]*?)SAT/);
-
-  if (match) {
-    const dataSection = match[1];
-    const matrixMatch = dataSection.match(/\[\[.*?\]\]/);
-    if (matrixMatch) {
-      try {
-        const matrix = JSON.parse(matrixMatch[0].replace(/'/g, '"')); // Replace single quotes with double quotes for JSON parsing
-        return { matrix };
-      } catch (error) {
-        console.error('Error parsing matrix:', error);
-      }
-    }
-  }
-  return { matrix: null };
-};
-
-// -----------------------------------------------------------------------------------
-// Define routes
+// Create /neo4j router
 const router = express.Router();
 app.use('/neo4j', router);
-// Use the logging middleware for all routes
 router.use(logRouteName);
 
-// 1) load nodes from neo4j and return them as a simple json object
-router.get('/loadNodes', async (req, res) => {
+// ----------------------------------------------------------
+// Neo4j session helpers
+// ----------------------------------------------------------
+async function loadStopsFromNeo4j() {
+  const session = driver.session({ database: config.neo4jDatabase });
   try {
-    const session = driver.session({ database: config.neo4jDatabase });
-    // Example query: fetch nodes of type cars
-    const fetchNodesQuery = `
-      MATCH (n:cars)
-      RETURN n.Model AS Model, 
-             n.Fuel AS Fuel, 
-             n.Air_Pollution_Score AS Air_Pollution_Score, 
-             n.Greenhouse_Gas_Score AS Greenhouse_Gas_Score, 
-             n.Price_EUR AS Price_EUR
+    const query = `
+      MATCH (n:Node)
+      RETURN n.name AS name,
+             n.latitude AS latitude,
+             n.longitude AS longitude,
+             n.people AS demand
     `;
-
-    session
-      .run(fetchNodesQuery)
-      .then((result) => {
-        const nodes = result.records.map((record) => ({
-          Model: record.get('Model'),
-          Fuel: record.get('Fuel'),
-          Air_Pollution_Score: record.get('Air_Pollution_Score'),
-          Cmb_MPG: record.get('Cmb_MPG'), // This property might need to be updated if it exists
-          Greenhouse_Gas_Score: record.get('Greenhouse_Gas_Score'),
-          Price_EUR: record.get('Price_EUR')
-        }));
-        console.log('--> #nodes:', nodes.length);
-        res.json(nodes);
-      })
-      .catch((error) => {
-        console.error('Error fetching nodes from Neo4j:', error);
-        res.status(500).send('Failed to load nodes.');
-      })
-      .then(() => {
-        session.close();
-      });
+    const result = await session.run(query);
+    return result.records.map(rec => ({
+      name: rec.get('name'),
+      latitude: rec.get('latitude'),
+      longitude: rec.get('longitude'),
+      demand: rec.get('demand') || 0,
+    }));
   } catch (error) {
-    console.error('Error loading nodes:', error);
-    res.status(500).send('Failed to load nodes.');
+    console.error('[ERROR] loadStopsFromNeo4j:', error);
+    throw new Error('Failed to load stops.');
+  } finally {
+    await session.close();
+  }
+}
+async function getVehicleFilters() {
+  const session = driver.session({ database: config.neo4jDatabase });
+  try {
+    const query = `MATCH (v:Vehicle) RETURN v`;
+    const result = await session.run(query);
+
+    // Map the results and remove keys with null or NaN values
+    return result.records.map(record => {
+      const vehicle = record.get('v').properties;
+
+      // Iterate over the keys and delete those with null or NaN values
+      for (const key in vehicle) {
+        if (vehicle[key] === null || (typeof vehicle[key] === 'number' && isNaN(vehicle[key]))) {
+          delete vehicle[key];
+        }
+      }
+
+      return vehicle;
+    });
+  } catch (error) {
+    console.error('[ERROR] getVehicleFilters:', error);
+    throw new Error('Failed to get vehicle filters.');
+  } finally {
+    await session.close();
+  }
+}
+
+
+
+
+async function mergeVehiclesFromNeo4j(filters) {
+  const session = driver.session({ database: config.neo4jDatabase });
+  try {
+    const vehicleResults = [];
+
+    for (let i = 0; i < filters.length; i++) {
+      const filter = filters[i];
+      const whereClauses = [];
+      const params = {};
+
+      for (const key in filter) {
+        if (filter[key] !== null && filter[key] !== undefined && key !== "vehicleID") {
+          const value = filter[key];
+
+          // Check the type of the value and format appropriately
+          if (typeof value === "string") {
+            // For strings, use quotes
+            whereClauses.push(`v.${key} = "${value}"`);
+          } else if (typeof value === "number") {
+            // For numbers, use the raw value (no quotes)
+            whereClauses.push(`v.${key} = ${value}`);
+          } else if (value instanceof Date) {
+            // For dates, format to ISO string and use quotes
+            whereClauses.push(`v.${key} = date("${value.toISOString()}")`);
+          } else {
+            // For other types, convert to string as a fallback
+            whereClauses.push(`$v.${key} = "${String(value)}"`);
+          }
+
+          // Assign the value to the params object
+          params[key] = value;
+        }
+      }
+
+
+      // Skip empty filters
+      if (whereClauses.length === 0) {
+        console.log(`[DEBUG] No valid filters for index ${i}, skipping query.`);
+        continue;
+      }
+
+      const whereString = `WHERE ${whereClauses.join(" AND ")}`;
+      console.log(`[DEBUG] whereString for filter ${i}: ${whereString}`);
+      console.log(`[DEBUG] params for filter ${i}:`, params);
+
+      const query = `
+        MATCH (v:cars)
+        ${whereString}
+        RETURN v
+      `;
+
+      const result = await session.run(query, params);
+
+      // Process results
+      result.records.forEach((record) => {
+        const vehicle = record.get("v").properties;
+
+        // Add the vehicle ID to the object
+        vehicle.vehicleID = record.get("v").identity.toInt();
+
+        // Save the full object to the results
+        vehicleResults.push(vehicle);
+      });
+    }
+
+    return vehicleResults;
+  } catch (error) {
+    console.error("[ERROR] mergeVehiclesFromNeo4j:", error);
+    throw new Error("Failed to fetch vehicles for filters.");
+  } finally {
+    await session.close();
+  }
+}
+
+
+
+async function loadVehiclesFromNeo4j() {
+  const session = driver.session({ database: config.neo4jDatabase });
+  try {
+    const query = `
+      MATCH (v:Vehicle)
+      RETURN v.vehicleName AS vehicleName,
+             v.model AS model,
+             v.fuel AS fuel,
+             v.air_pollution_score AS air_pollution_score,
+             v.display AS display,
+             v.cyl AS cyl,
+             v.drive AS drive,
+             v.stnd AS stnd,
+             v.stnd_description AS stnd_description,
+             v.cert_region AS cert_region,
+             v.transmission AS transmission,
+             v.underhood_id AS underhood_id,
+             v.veh_class AS veh_class,
+             v.city_mpg AS city_mpg,
+             v.hwy_mpg AS hwy_mpg,
+             v.cmb_mpg AS cmb_mpg,
+             v.greenhouse_gas_score AS greenhouse_gas_score,
+             v.smartway AS smartway,
+             v.price_eur AS price_eur
+    `;
+    const result = await session.run(query);
+    if (!result.records.length) {
+      console.warn('[WARN] No vehicles found in DB.');
+    }
+    return result.records.map(record => ({
+      vehicleName: record.get('vehicleName'),
+      model: record.get('model'),
+      fuel: record.get('fuel'),
+      air_pollution_score: record.get('air_pollution_score'),
+      display: record.get('display'),
+      cyl: record.get('cyl'),
+      drive: record.get('drive'),
+      stnd: record.get('stnd'),
+      stnd_description: record.get('stnd_description'),
+      cert_region: record.get('cert_region'),
+      transmission: record.get('transmission'),
+      underhood_id: record.get('underhood_id'),
+      veh_class: record.get('veh_class'),
+      city_mpg: record.get('city_mpg'),
+      hwy_mpg: record.get('hwy_mpg'),
+      cmb_mpg: record.get('cmb_mpg'),
+      greenhouse_gas_score: record.get('greenhouse_gas_score'),
+      smartway: record.get('smartway'),
+      price_eur: record.get('price_eur'),
+    }));
+  } catch (error) {
+    console.error('[ERROR] loadVehiclesFromNeo4j:', error);
+    throw new Error('Failed to load vehicles.');
+  } finally {
+    await session.close();
+  }
+}
+
+// ----------------------------------------------------------
+// /checkonload route -> calls checkAndPopulateDatabase
+// ----------------------------------------------------------
+router.get('/checkonload', async (req, res) => {
+  try {
+    console.log('[INFO] Checking if DB is empty...');
+    const empty = await isDatabaseEmpty();
+    if (empty) {
+      console.log('[INFO] DB empty, populating...');
+      await populateDatabase();
+      console.log('[INFO] DB populated successfully.');
+    } else {
+      console.log('[INFO] DB not empty, skipping populate.');
+    }
+    res.status(200).json({ message: 'Database check + population done.' });
+  } catch (error) {
+    console.error('[ERROR] During DB check/populate:', error);
+    res.status(500).send('Internal server error during DB initialization.');
   }
 });
 
-// 2) load vehicles from neo4j and return them as a simple json object
-router.get('/loadVehicles', async (req, res) => {
+// ----------------------------------------------------------
+// 1) /loadNodes example
+// ----------------------------------------------------------
+router.get('/loadNodes', async (req, res) => {
+  const session = driver.session({ database: config.neo4jDatabase });
   try {
-    const session = driver.session({ database: config.neo4jDatabase });
-
-    // Example query: fetch same data as in loadNodes, or adjust for 'vehicles'
-    const fetchVehiclesQuery = `
+    const query = `
       MATCH (n:cars)
-      RETURN n.Model AS Model, 
-             n.Fuel AS Fuel, 
-             n.Air_Pollution_Score AS Air_Pollution_Score, 
-             n.Greenhouse_Gas_Score AS Greenhouse_Gas_Score, 
-             n.Price_EUR AS Price_EUR
+      RETURN n.vehicleName AS vehicleName,
+             n.model AS model,
+             n.fuel AS fuel,
+             n.air_pollution_score AS air_pollution_score,
+             n.display AS display,
+             n.cyl AS cyl,
+             n.drive AS drive,
+             n.stnd AS stnd,
+             n.stnd_description AS stnd_description,
+             n.cert_region AS cert_region,
+             n.transmission AS transmission,
+             n.underhood_id AS underhood_id,
+             n.veh_class AS veh_class,
+             n.city_mpg AS city_mpg,
+             n.hwy_mpg AS hwy_mpg,
+             n.cmb_mpg AS cmb_mpg,
+             n.greenhouse_gas_score AS greenhouse_gas_score,
+             n.smartway AS smartway,
+             n.price_eur AS price_eur
     `;
-
-    session
-      .run(fetchVehiclesQuery)
-      .then((result) => {
-        const vehicles = result.records.map((record) => ({
-          Model: record.get('Model'),
-          Fuel: record.get('Fuel'),
-          Air_Pollution_Score: record.get('Air_Pollution_Score'),
-          Cmb_MPG: record.get('Cmb_MPG'),
-          Greenhouse_Gas_Score: record.get('Greenhouse_Gas_Score'),
-          Price_EUR: record.get('Price_EUR')
-        }));
-        res.json(vehicles);
-      })
-      .catch((error) => {
-        console.error('Error fetching vehicles from Neo4j:', error);
-        res.status(500).send('Failed to load vehicles.');
-      })
-      .then(() => {
-        session.close();
-      });
+    const result = await session.run(query);
+    const nodes = result.records.map(rec => ({
+      vehicleName: rec.get('vehicleName'),
+      model: rec.get('model'),
+      cert_region: rec.get('cert_region'),
+      transmission: rec.get('transmission'),
+      fuel: rec.get('fuel'),
+      drive: rec.get('drive'),
+      price: rec.get('price_eur'),
+      air_pollution_score: rec.get('air_pollution_score'),
+      smartway: rec.get('smartway'),
+      greenhouse_gas_score: rec.get('greenhouse_gas_score'),
+      city_mpg: rec.get('city_mpg'),
+      hwy_mpg: rec.get('hwy_mpg'),
+      cmb_mpg: rec.get('cmb_mpg'),
+      display: rec.get('display'),
+      stnd: rec.get('stnd'),
+      stnd_description: rec.get('stnd_description'),
+      veh_class: rec.get('veh_class'),
+      underhood_id: rec.get('underhood_id'),
+      cyl: rec.get('cyl'),
+    }));
+    res.json(nodes);
   } catch (error) {
-    console.error('Error loading vehicles:', error);
+    console.error('[ERROR] /loadNodes:', error);
+    res.status(500).send('Failed to load nodes.');
+  } finally {
+    session.close();
+  }
+});
+
+router.get('/populateVehiclesFromCars', async (req, res) => {
+  try {
+    const vehicles = await loadVehiclesFromNeo4j();
+    res.json(vehicles);
+  } catch (error) {
+    console.error('[ERROR] /populateVehiclesFromCars:', error);
     res.status(500).send('Failed to load vehicles.');
   }
 });
 
-// 3) A sample route that queries OpenRouteService to get multiple alternative routes
-router.post('/getOurRoutes', async (req, res) => {
-  const { locations, car } = req.body; // Expecting `locations` from the frontend
+// ----------------------------------------------------------
+// 2) /loadVehicles example
+// ----------------------------------------------------------
+router.get('/loadVehicles', async (req, res) => {
+  const session = driver.session({ database: config.neo4jDatabase });
+  try {
+    const query = `
+      MATCH (n:cars)
+      RETURN n.vehicleName AS vehicleName,
+             n.model AS model,
+             n.fuel AS fuel,
+             n.air_pollution_score AS air_pollution_score,
+             n.display AS display,
+             n.cyl AS cyl,
+             n.drive AS drive,
+             n.stnd AS stnd,
+             n.stnd_description AS stnd_description,
+             n.cert_region AS cert_region,
+             n.transmission AS transmission,
+             n.underhood_id AS underhood_id,
+             n.veh_class AS veh_class,
+             n.city_mpg AS city_mpg,
+             n.hwy_mpg AS hwy_mpg,
+             n.cmb_mpg AS cmb_mpg,
+             n.greenhouse_gas_score AS greenhouse_gas_score,
+             n.smartway AS smartway,
+             n.price_eur AS price_eur
+    `;
+    const result = await session.run(query);
+    const vehicles = result.records.map(rec => ({
+      vehicleName: rec.get('vehicleName'),
+      model: rec.get('model'),
+      transmission: rec.get('transmission'),
+      cert_region: rec.get('cert_region'), // correct key
+      fuel: rec.get('fuel'),
+      drive: rec.get('drive'),
+      price: rec.get('price_eur'),
+      air_pollution_score: rec.get('air_pollution_score'),
+      smartway: rec.get('smartway'),
+      greenhouse_gas_score: rec.get('greenhouse_gas_score'),
+      city_mpg: rec.get('city_mpg'),
+      hwy_mpg: rec.get('hwy_mpg'),
+      cmb_mpg: rec.get('cmb_mpg'),
+      display: rec.get('display'),
+      stnd: rec.get('stnd'),
+      stnd_description: rec.get('stnd_description'),
+      veh_class: rec.get('veh_class'),
+      underhood_id: rec.get('underhood_id'),
+      cyl: rec.get('cyl'),
+    }));
+    res.json(vehicles);
+  } catch (error) {
+    console.error('[ERROR] /loadVehicles:', error);
+    res.status(500).send('Failed to load vehicles.');
+  } finally {
+    session.close();
+  }
+});
 
+
+/**
+ * 2. Convert an encoded 2D polyline to a GeoJSON LineString in [lon, lat] order.
+ */
+function polylineToGeojsonLineString(encodedPolyline) {
+  const decoded = polylineLib.decode(encodedPolyline); // Decode polyline into array
+  if (decoded.length < 2) {
+    console.error("🚨 Polyline decoded to less than 2 points:", decoded);
+  }
+  return {
+    type: "LineString",
+    coordinates: decoded.map(([lat, lon]) => [lon, lat]) // Convert to GeoJSON format
+  };
+}
+// ----------------------------------------------------------
+// 3) /getOurRoutes -> OpenRouteService
+// ----------------------------------------------------------
+router.post('/getOurRoutes', async (req, res) => {
+  const { locations, car } = req.body;
   if (!locations || locations.length < 2) {
-    return res.status(400).send('At least two locations are required to calculate routes.');
+    return res.status(400).send('At least two locations are required.');
   }
 
-  // Construct the payload for ORS
   const payload = JSON.stringify({
     coordinates: locations,
     alternative_routes: {
-      target_count: 10, // Number of alternative routes
-      share_factor: 0.6, // Degree of similarity to the main route
-      weight_factor: 1.2 // Allowing less optimal alternatives
+      target_count: 10,
+      share_factor: 0.6,
+      weight_factor: 1.2,
     },
-    format: 'json', // Response format
-    instructions: true // Include turn-by-turn instructions
+    format: 'json',
+    instructions: true,
   });
 
   const options = {
@@ -407,613 +549,754 @@ router.post('/getOurRoutes', async (req, res) => {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Content-Length': Buffer.byteLength(payload),
-      Authorization: config.ORS_Key // Your ORS API Key
-    }
+      Authorization: config.ORS_Key,
+    },
   };
 
   try {
     const orsResponse = await new Promise((resolve, reject) => {
-      const req = https.request(options, (res) => {
+      const request = https.request(options, response => {
         let responseData = '';
-
-        res.on('data', (chunk) => {
-          responseData += chunk;
-        });
-
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
+        response.on('data', chunk => (responseData += chunk));
+        response.on('end', () => {
+          if (response.statusCode >= 200 && response.statusCode < 300) {
             try {
-              resolve(JSON.parse(responseData));
+              const json = JSON.parse(responseData);
+              resolve(json);
             } catch (err) {
               reject(new Error('Failed to parse ORS response'));
             }
           } else {
-            reject(new Error(`ORS request failed with status ${res.statusCode}: ${responseData}`));
+            reject(
+              new Error(
+                `ORS request failed: ${response.statusCode} - ${responseData}`
+              )
+            );
           }
         });
       });
-
-      req.on('error', (err) => {
-        reject(err);
-      });
-
-      req.write(payload);
-      req.end();
+      request.on('error', err => reject(err));
+      request.write(payload);
+      request.end();
     });
 
     const { routes } = orsResponse;
-
-    // Analyze routes for stops, tollway distance, and elevation changes
     const analyzedRoutes = await Promise.all(
-      routes.map(async (route, index) => {
-        const decodedPolyline = decodePolyline(route.geometry);
-        const elevationData = await getElevationData(route.geometry);
-        const totalStops = route.way_points.length - 2; // Excluding start and end
-        const tollwayDistance = calculateTollwayDistance(route.segments);
-        const elevationChanges = calculateElevationChanges(elevationData);
-
+      routes.map((route, index) => {
+        const decoded = polylineLib.decode(route.geometry);
+        const totalStops = route.way_points.length - 2;
+        const tollwayDistance = 0;
+        const elevationChanges = { totalElevationGain: 0, totalElevationLoss: 0 };
         return {
           routeIndex: index,
-          distance: route.summary.distance, // Distance in meters
-          duration: route.summary.duration, // Duration in seconds
-          tollwayDistance, // Total distance of tollways
-          totalStops, // Number of stops along the route
-          elevationChanges, // Elevation change information
-          geometry: route.geometry, // Encoded polyline for mapping
-          instructions: route.segments.flatMap((segment) =>
-            segment.steps.map((step) => ({
+          distance: route.summary.distance,
+          duration: route.summary.duration,
+          tollwayDistance,
+          totalStops,
+          elevationChanges,
+          geometry: route.geometry,
+          instructions: route.segments.flatMap(seg =>
+            seg.steps.map(step => ({
               instruction: step.instruction,
-              distance: step.distance, // Distance for this step
-              duration: step.duration // Duration for this step
+              distance: step.distance,
+              duration: step.duration,
             }))
-          )
+          ),
         };
       })
     );
 
     res.json({ routes: analyzedRoutes });
   } catch (error) {
-    console.error('Error fetching routes with alternatives from ORS:', error.message);
-    res.status(500).send('Failed to fetch routes with alternatives from OpenRouteService.');
+    console.error('[ERROR] /getOurRoutes:', error.message);
+    res.status(500).send('Failed to fetch routes with alternatives.');
   }
 });
 
-// Helper to decode polyline
-function decodePolyline(encoded) {
-  const polyline = require('@mapbox/polyline'); // Install @mapbox/polyline if not installed
-  return polyline.decode(encoded);
+/**
+ * 7. Process a single route:
+ *    - decode geometry => GeoJSON => fetch elevation => compute stats => return route data
+ */
+async function processSingleRoute(route, orsKey) {
+  const encoded2D = route.geometry;
+  // convert 2D polyline => GeoJSON linestring
+  const geoLine = polylineToGeojsonLineString(encoded2D);
+  // fetch 3D data
+  const elevationResult = await fetchElevationLine(geoLine, orsKey);
+  const coords3D = elevationResult.geometry.coordinates;
+  const { totalElevationGain, totalElevationLoss } = computeElevationStats(coords3D);
+  // placeholders
+  const totalStops = (route.way_points.length || 2) - 2;
+  const tollwayDistance = 0;
+
+  return {
+    distance: route.summary.distance,
+    duration: route.summary.duration,
+    geometry: route.geometry,
+    instructions: route.segments.flatMap((seg) =>
+      seg.steps.map((step) => ({
+        instruction: step.instruction,
+        distance: step.distance,
+        duration: step.duration,
+      }))
+    ),
+    totalStops: totalStops,
+    tollwayDistance: tollwayDistance,
+    elevationGain: totalElevationGain, 
+    elevationLoss: totalElevationLoss,
+  };
 }
 
-// Helper to fetch elevation data
-async function getElevationData(encodedGeometry) {
-  const elevationPayload = JSON.stringify({
-    format_in: 'encodedpolyline',
-    geometry: encodedGeometry
-  });
+// Helper for analyzing routes (if you want it separately)
+async function fetchAndAnalyzeRoutes(locations, configObj) {
+  if (!locations || locations.length < 2) {
+    throw new Error('At least two locations are required.');
+  }
 
+  let payloadObj = {
+    coordinates: locations,
+    format: 'json',
+    instructions: true,
+    elevation: true,
+  };
+  if (locations.length === 2) {
+    payloadObj.alternative_routes = {
+      target_count: 3,
+      share_factor: 0.6,
+      weight_factor: 1.2,
+    };
+  }
+  const payload = JSON.stringify(payloadObj);
+  const myConfigObj = { ORS_Key: "5b3ce3597851110001cf6248ac6c520907eb4dfa85df789d9ba10beb"};
   const options = {
     hostname: 'api.openrouteservice.org',
-    path: '/elevation/line',
+    path: '/v2/directions/driving-car',
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(elevationPayload),
-      Authorization: config.ORS_Key // Your ORS API Key
-    }
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Length': Buffer.byteLength(payload),
+      Authorization: myConfigObj.ORS_Key,
+    },
   };
 
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      let responseData = '';
-
-      res.on('data', (chunk) => {
-        responseData += chunk;
+  try {
+    const orsResponse = await new Promise((resolve, reject) => {
+      const request = https.request(options, response => {
+        let responseData = '';
+        response.on('data', chunk => (responseData += chunk));
+        response.on('end', () => {
+          if (response.statusCode >= 200 && response.statusCode < 300) {
+            try {
+              const json = JSON.parse(responseData);
+              resolve(json);
+            } catch (err) {
+              reject(new Error('Failed to parse ORS response JSON'));
+            }
+          } else {
+            reject(
+              new Error(
+                `ORS request failed: HTTP ${response.statusCode} - ${responseData}`
+              )
+            );
+          }
+        });
       });
+      request.on('error', err => reject(err));
+      request.write(payload);
+      request.end();
+    });
 
+    const { routes } = orsResponse;
+
+    const analyzed = await Promise.all(routes.map(async (route, index) => {
+      const singleRoute = await processSingleRoute(route, myConfigObj.ORS_Key);
+      if (!singleRoute) {
+        console.error(`Skipping route ${index} due to missing data.`);
+        return null;
+      }
+      return {
+        routeIndex: index,
+        distance: singleRoute.distance,
+        duration: singleRoute.duration,
+        geometry: singleRoute.geometry,
+        instructions: route.segments.flatMap(seg =>
+          seg.steps.map(step => ({
+            instruction: step.instruction,
+            distance: step.distance,
+            duration: step.duration,
+          }))
+        ),
+        totalStops: singleRoute.totalStops,
+        tollWayDistance: singleRoute.tollwayDistance,
+        elevationGain: singleRoute.elevationGain,
+        elevationLoss: singleRoute.elevationLoss,
+        
+      };
+    }));
+
+    // ✅ Fix: Filter only valid results
+    return analyzed.filter(route => route !== null);
+  } catch (error) {
+    console.error('[ERROR] fetchAndAnalyzeRoutes:', error.message);
+    throw new Error('Failed to fetch routes with alternatives.');
+  }
+}
+
+// ----------------------------------------------------------
+// 4) /getRoutes - relationships
+// ----------------------------------------------------------
+router.get('/getRoutes', async (req, res) => {
+  const retrieveAllNodeRelationships = `
+    MATCH (a:Node)-[r]->(b:Node)
+    RETURN a AS a, b AS b, type(r) AS relType
+  `;
+  const session = driver.session({ database: config.neo4jDatabase });
+  try {
+    // If you want node details
+    const fetchNodeNamesQuery = `
+      MATCH (n:Node)
+      RETURN n.name AS name, n.latitude AS latitude, n.longitude AS longitude
+    `;
+    const nodeResult = await session.run(fetchNodeNamesQuery);
+    const nodeNames = nodeResult.records.map(rec => ({
+      name: rec.get('name'),
+      latitude: rec.get('latitude'),
+      longitude: rec.get('longitude'),
+    }));
+
+    const relResult = await session.run(retrieveAllNodeRelationships);
+    const relationships = relResult.records.map(record => {
+      const a = record.get('a');
+      const b = record.get('b');
+      const relType = record.get('relType');
+      return {
+        nodeA: {
+          name: a.properties.name,
+          vehicleName: a.properties.vehicleName,
+          latitude: a.properties.latitude,
+          longitude: a.properties.longitude,
+        },
+        nodeB: {
+          name: b.properties.name,
+          vehicleName: b.properties.vehicleName,
+          latitude: b.properties.latitude,
+          longitude: b.properties.longitude,
+        },
+        relationshipType: relType,
+      };
+    });
+    res.json(relationships);
+  } catch (error) {
+    console.error('[ERROR] /getRoutes:', error);
+    res.status(500).send('Failed to load relationships.');
+  } finally {
+    session.close();
+  }
+});
+
+/**
+ * Fetch a 2D route from ORS Directions (no elevation).
+ * @param {Array<Array<number>>} locations - Array of [longitude, latitude] pairs.
+ * @param {string} orsKey - Your ORS API key.
+ * @returns {Promise<Object>} - The parsed directions response with 2D geometry.
+ */
+function fetch2DDirections(locations, orsKey) {
+  return new Promise((resolve, reject) => {
+    if (!locations || locations.length < 2) {
+      return reject(new Error('At least two locations are required.'));
+    }
+
+    // Request payload: 2D geometry only
+    const payloadObj = {
+      coordinates: locations, // e.g. [ [lon, lat], [lon, lat], ... ]
+      format: 'json',
+      instructions: true,
+    };
+
+    // If exactly 2 points, optionally request alternative routes
+    if (locations.length === 2) {
+      payloadObj.alternative_routes = {
+        target_count: 10,
+        share_factor: 0.6,
+        weight_factor: 1.2,
+      };
+    }
+
+    const payload = JSON.stringify(payloadObj);
+    const options = {
+      hostname: 'api.openrouteservice.org',
+      path: '/v2/directions/driving-car',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        Authorization: orsKey,
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
       res.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try {
-            const data = JSON.parse(responseData);
-            resolve(data.geometry);
+            const json = JSON.parse(data);
+            resolve(json);
           } catch (err) {
-            reject(new Error('Failed to parse elevation data response'));
+            reject(new Error('Failed to parse ORS Directions response'));
           }
         } else {
           reject(
-            new Error(`Elevation data request failed with status ${res.statusCode}: ${responseData}`)
+            new Error(
+              `Directions request failed: HTTP ${res.statusCode} - ${data}`
+            )
           );
         }
       });
     });
 
-    req.on('error', (err) => {
-      reject(err);
-    });
-
-    req.write(elevationPayload);
+    req.on('error', (err) => reject(err));
+    req.write(payload);
     req.end();
   });
 }
 
-// Helper to calculate tollway distance
-function calculateTollwayDistance(segments) {
-  let totalTollwayDistance = 0;
-  segments.forEach((segment) => {
-    segment.steps.forEach((step) => {
-      if (step.attributes && step.attributes.includes('tollway')) {
-        totalTollwayDistance += step.distance;
-      }
+
+/**
+ * Fetch a 3D linestring from ORS Elevation/line endpoint using a GeoJSON LineString.
+ * @param {Object} geoLine - A GeoJSON LineString in [lon, lat] order.
+ * @param {string} orsKey - Your ORS API key.
+ * @returns {Promise<Object>} - The Elevation API response with 3D geometry.
+ */
+function fetchElevationLine(geoLine, orsKey) {
+  return new Promise((resolve, reject) => {
+    const payloadObj = {
+      format_in: 'geojson',
+      format_out: 'geojson',
+      geometry: geoLine,
+    };
+
+    const payload = JSON.stringify(payloadObj);
+    const options = {
+      hostname: 'api.openrouteservice.org',
+      path: '/elevation/line',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+        Authorization: orsKey,
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            const json = JSON.parse(data);
+            resolve(json);
+          } catch (err) {
+            reject(new Error('Failed to parse ORS Elevation response'));
+          }
+        } else {
+          reject(
+            new Error(`Elevation request failed: HTTP ${res.statusCode} - ${data}`)
+          );
+        }
+      });
     });
+
+    req.on('error', (err) => reject(err));
+    req.write(payload);
+    req.end();
   });
-  return totalTollwayDistance;
 }
 
-// Helper to calculate elevation changes
-function calculateElevationChanges(elevationData) {
+/**
+ * Compute total elevation gain and loss from a 3D linestring.
+ * @param {Array<Array<number>>} coords3D - Array of [lon, lat, elev].
+ * @returns {{ totalElevationGain: number, totalElevationLoss: number }}
+ */
+function computeElevationStats(coords3D) {
   let totalElevationGain = 0;
   let totalElevationLoss = 0;
-
-  for (let i = 1; i < elevationData.length; i++) {
-    const diff = elevationData[i][2] - elevationData[i - 1][2];
+  for (let i = 1; i < coords3D.length; i++) {
+    const prevElev = coords3D[i - 1][2] || 0;
+    const currElev = coords3D[i][2] || 0;
+    const diff = currElev - prevElev;
     if (diff > 0) {
       totalElevationGain += diff;
     } else {
-      totalElevationLoss -= diff;
+      totalElevationLoss += Math.abs(diff);
     }
   }
-
-  return {
-    totalElevationGain,
-    totalElevationLoss
-  };
+  return { totalElevationGain, totalElevationLoss };
 }
 
-// 4) load relationships between nodes from the Neo4j db to retrieve the routes
-router.get('/getRoutes', async (req, res) => {
-  let nodeNames = [];
+/** 
+* For one pair of points, fetch route + elevation + stats.
+* @param {Array<Array<number>>} pair - [ [lon1, lat1], [lon2, lat2] ]
+* @param {string} orsKey
+* @returns {Promise<Object>} 
+*/
+async function fetchRouteWithElevationForPair(pair, orsKey) {
+ // 1) fetch directions (2D)
+ const directionsData = await fetch2DDirections(pair, orsKey);
+ if (!directionsData.routes || directionsData.routes.length === 0) {
+   return null; // or throw new Error('No routes found')
+ }
 
-  async function loadNodeNames() {
-    try {
-      const session = driver.session({ database: config.neo4jDatabase });
-      const fetchNodeNamesQuery = `
-        MATCH (n:Node)
-        RETURN n.name AS name, n.latitude AS latitude, n.longitude AS longitude
-      `;
-      const result = await session.run(fetchNodeNamesQuery);
-      nodeNames = result.records.map((record) => {
-        return {
-          name: record.get('name'),
-          latitude: record.get('latitude'),
-          longitude: record.get('longitude')
-        };
-      });
-      await session.close();
-    } catch (error) {
-      console.error('Error loading nodes:', error);
-      res.status(500).send('Failed to load nodes.');
+ // Take first route for simplicity
+ const route = directionsData.routes[0];
+
+ // 2) build GeoJSON for elevation
+ const geoLine = polylineToGeojsonLineString(route.geometry);
+
+ // 3) get 3D from elevation
+ const elevationRes = await fetchElevationLine(geoLine, orsKey);
+ if (!elevationResult || !elevationResult.geometry || !elevationResult.geometry.coordinates) {
+  console.error('Failed to fetch elevation data:', elevationResult);
+  return null;
+}
+ const coords3D = elevationRes.geometry.coordinates;
+
+ // 4) compute stats
+ const { totalElevationGain, totalElevationLoss } = computeElevationStats(coords3D);
+
+ return {
+   distance: route.summary.distance,
+   duration: route.summary.duration,
+   instructions: route.segments.flatMap((seg) =>
+     seg.steps.map((step) => ({
+       instruction: step.instruction,
+       distance: step.distance,
+       duration: step.duration,
+     }))
+   ),
+   elevationChanges: { totalElevationGain, totalElevationLoss },
+   geometry: route.geometry,
+ };
+}
+
+/**
+ * Generate all unique 2-point pairs from an array.
+ * e.g., [p1, p2, p3] => [[p1, p2], [p1, p3], [p2, p3]]
+ */
+function generatePairs(points) {
+  const pairs = [];
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      pairs.push([points[i], points[j]]);
     }
   }
+  return pairs;
+}
 
-  try {
-    await loadNodeNames();
 
-    const session = driver.session({ database: config.neo4jDatabase });
-    // For demonstration, user must define `retrieveAllNodeRelationships`:
-    const retrieveAllNodeRelationships = `
-      // TODO: MATCH your relationships & return them.
-      // Example:
-      // MATCH (a:Node)-[r]-(b:Node) RETURN a, b, type(r) as type(r)
-    `;
-    const relationships = [];
-
-    const result = await session.run(retrieveAllNodeRelationships);
-    result.records.map((record) => {
-      const a = record.get('a');
-      const b = record.get('b');
-      const relationshipType = record.get('type(r)');
-
-      const nodeAProperties = {
-        name: a.properties.name,
-        vehicleName: a.properties.vehicleName,
-        latitude: a.properties.latitude,
-        longitude: a.properties.longitude
-      };
-      const nodeBProperties = {
-        name: b.properties.name,
-        vehicleName: b.properties.vehicleName,
-        latitude: b.properties.latitude,
-        longitude: b.properties.longitude
-      };
-
-      relationships.push({
-        nodeA: nodeAProperties,
-        nodeB: nodeBProperties,
-        relationshipType
-      });
-    });
-
-    // Let's simplify the json - GROUP BY vehicleName
-    const simplifiedData = simplifyRouteData(relationships);
-
-    // extract all stops that are currently assigned to vehicles
-    const assignedStops = new Set();
-    simplifiedData.forEach((vehicle) => {
-      vehicle.stops.forEach((stop) => {
-        assignedStops.add(stop.name);
-      });
-    });
-
-    // (Optional) filter nodeNames to find those not included into any route, etc.
-    const missingNodesSet = new Set(nodeNames.map((node) => node.name));
-
-    simplifiedData.forEach((vehicle) => {
-      if (!vehicle.routeStartServed && vehicle.stops.length > 0) {
-        const firstStop = vehicle.stops[0];
-        if (!assignedStops.has(firstStop.name)) {
-          missingNodesSet.add(firstStop.name);
-        }
-      }
-    });
-
-    // Remove served nodes from missingNodesSet
-    assignedStops.forEach((stopName) => {
-      missingNodesSet.delete(stopName);
-    });
-
-    // Convert missingNodesSet back to array of node objects
-    const missingNodes = nodeNames.filter((node) => missingNodesSet.has(node.name));
-
-    // create new object for all the unassigned stops
-    const unassignedVehicle = {
-      vehicleName: 'unassigned',
-      stops: missingNodes
+/**
+ * Given an array of points, generate all 2-sets, fetch route + elevation for each pair.
+ * @param {Array<Array<number>>} points - array of [lon, lat]
+ * @param {string} orsKey
+ * @returns {Promise<Array<Object>>} array of results, each containing { pair, routeData }
+ */
+async function fetchAllPairRoutesWithElevation(points, orsKey) {
+  const pairs = generatePairs(points); // produce all [p1, p2]
+  
+  const promises = pairs.map(async (pair) => {
+    const routeData = await fetchRouteWithElevationForPair(pair, orsKey);
+    return {
+      pair,
+      routeData,
     };
+  });
 
-    simplifiedData.push(unassignedVehicle);
-
-    res.json(simplifiedData);
-    await session.close();
-  } catch (error) {
-    console.log('Error loading all node relationships from Neo4j:', error);
-    res.status(500).send('Failed to load all node relationships.');
-  }
-});
-
-// 5) Example route to retrieve a solution from ORS optimization - incomplete
-router.get('/getRoutesFromORS', async (req, res) => {
-  let locations, stopNames, storedNodes, vehicleConfig;
-
-  async function loadNodes() {
-    try {
-      const session = driver.session({ database: config.neo4jDatabase });
-      const fetchNodesQuery = `
-        MATCH (n:Node)
-        RETURN n.latitude AS latitude, 
-               n.longitude AS longitude, 
-               n.name AS name
-      `;
-      const result = await session.run(fetchNodesQuery);
-      const nodes = result.records.map((record) => ({
-        latitude: record.get('latitude'),
-        longitude: record.get('longitude'),
-        name: record.get('name')
-      }));
-      storedNodes = nodes;
-
-      locations = storedNodes.map((node) => [node.longitude, node.latitude]);
-      stopNames = storedNodes.map((node) => node.name); // Extract node names
-
-      console.log(
-        '-------Loaded Nodes:\n--------nodes:',
-        nodes,
-        '\n--------locations:',
-        locations,
-        '\n--------stopNames:',
-        stopNames
-      );
-
-      await session.close();
-    } catch (error) {
-      console.error('Error loading nodes:', error);
-      res.status(500).send('Failed to load nodes.');
-    }
-  }
-  await loadNodes();
-
-  // load the vehicles next and setup vehicleConfig for the API
-  async function loadVehicles() {
-    try {
-      const session = driver.session({ database: config.neo4jDatabase });
-      const fetchVehiclesQuery = `
-        // e.g.: MATCH (v:Vehicle) RETURN v.vehicleID as vehicleID, v.capacity as capacity
-      `;
-      const result = await session.run(fetchVehiclesQuery);
-      const vehicles = result.records.map((record) => ({
-        vehicleID: record.get('vehicleID'),
-        capacity: record.get('capacity')
-      }));
-
-      vehicleConfig = vehicles.map((v) => {
-        return {
-          id: v.vehicleID, // Store the original vehicle ID from your configuration
-          profile: 'driving-car',
-          capacity: [v.capacity]
-        };
-      });
-    } catch (error) {
-      console.error('Error loading vehicles:', error);
-      res.status(500).send('Failed to load vehicles.');
-    }
-  }
-  await loadVehicles();
-
-  console.log('-------------vehicle config for optimization API:', vehicleConfig);
-
-  const busStops = storedNodes.map((node, index) => ({
-    id: index + 2,
-    latitude: node.latitude,
-    longitude: node.longitude,
-    name: node.name
-  }));
-
-  // You would build the "jobs" param as required by ORS optimization, etc.
-  // ...
-  res.send('Not implemented yet.');
-});
-
-// -----------------------------------------------------------------------------------
-// (A) Utility: Haversine formula
-function deg2rad(deg) {
-  return deg * (Math.PI / 180);
-}
-function computeHaversineDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371000; // Earth's radius in meters
-  const dLat = deg2rad(lat2 - lat1);
-  const dLon = deg2rad(lon2 - lon1);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(lat1)) *
-      Math.cos(deg2rad(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = R * c;
-  return distance; // meters
+  return Promise.all(promises);
 }
 
-// (B) Compute pairwise distances for an array of stops
-function computeAllDistances(stops) {
-  const distances = [];
-  for (let i = 0; i < stops.length; i++) {
-    for (let j = i + 1; j < stops.length; j++) {
-      const nodeA = stops[i];
-      const nodeB = stops[j];
-      const distMeters = computeHaversineDistance(
-        nodeA.latitude,
-        nodeA.longitude,
-        nodeB.latitude,
-        nodeB.longitude
-      );
-      const distRounded = Math.round(distMeters);
 
-      distances.push({
-        from: nodeA.name,
-        to: nodeB.name,
-        distance: distRounded
-      });
-      // If you want symmetrical distance, push the reverse too:
-      distances.push({
-        from: nodeB.name,
-        to: nodeA.name,
-        distance: distRounded
-      });
-    }
-  }
-  return distances;
+function coordToNodeName([lon, lat]) {
+  // Or do something more robust (like rounding or hashing)
+  let name = `pt_${lon.toFixed(4)}_${lat.toFixed(4)}`;
+  return name.toLowerCase().replace(/[^a-z0-9_]+/g, '');
 }
 
-// (C) Load stops & vehicles from DB
-async function loadStopsFromNeo4j() {
-  try {
-    const session = driver.session({ database: config.neo4jDatabase });
-
-    const fetchStopsQuery = `
-      MATCH (n:Node)
-      RETURN n.name AS name, 
-             n.latitude AS latitude, 
-             n.longitude AS longitude, 
-             n.demand AS demand
-    `;
-    const result = await session.run(fetchStopsQuery);
-
-    const stops = result.records.map((record) => ({
-      name: record.get('name'),
-      latitude: record.get('latitude'),
-      longitude: record.get('longitude'),
-      demand: record.get('demand') || 0 // Default to 0 if demand is not set
-    }));
-
-    await session.close();
-    return stops;
-  } catch (error) {
-    console.error('Error loading stops from Neo4j:', error);
-    throw new Error('Failed to load stops from Neo4j.');
-  }
+function sanitizeAspString(str) {
+  return str.replace(/"/g, '\\"'); 
 }
 
-async function loadVehiclesFromNeo4j() {
-  try {
-    const session = driver.session({ database: config.neo4jDatabase });
-    const fetchVehiclesQuery = `
-      MATCH (v:Vehicle)
-      RETURN v.vehicleName AS vehicleName, 
-             v.capacity AS capacity
-    `;
-    const result = await session.run(fetchVehiclesQuery);
 
-    const vehicles = result.records.map((record) => ({
-      vehicleName: record.get('vehicleName'),
-      capacity: record.get('capacity')
-    }));
-
-    await session.close();
-    return vehicles;
-  } catch (error) {
-    console.error('Error loading vehicles from Neo4j:', error);
-    throw new Error('Failed to load vehicles from Neo4j.');
-  }
-}
-
-// 6) The retrieveASPrules route - fix with computeAllDistances
+// ----------------------------------------------------------
+// 5) /retrieveASPrules - Build ASP facts
+// ----------------------------------------------------------
 router.get('/retrieveASPrules', async (req, res) => {
   try {
-    // 1. Load stops from DB
     const nodes = await loadStopsFromNeo4j();
-    // 2. Load vehicles from DB
-    const vehicles = await loadVehiclesFromNeo4j();
-
-    // 3. Build ASP facts
+    const vehiclesFilters = await getVehicleFilters();
+    const vehicles = await mergeVehiclesFromNeo4j(vehiclesFilters);
     let aspFacts = '';
-
-    // (a) Create a `node(...)` fact for each stop
+    let j = 0;
+    // Generate node facts
     nodes.forEach((node) => {
-      // Optionally transliterate the name to remove accents
-      const nodeName = transliterate(node.name || '')
-        .toLowerCase()
-        .replace(/\s+/g, '');
+      let nodeName = transliterate(node.name || '').toLowerCase().replace(/[^a-z0-9_\'\"]+/g, '');
+      if (!nodeName.match(/^[a-z]/)) {
+        nodeName = 'node_' + nodeName;
+      }
+      console.log('index is --> ', j);
+      // if its the index is 0
+      if (j === 0) {
+        aspFacts += `start_node(${nodeName}).\n`;
+      }
+      j++;
+
       aspFacts += `node(${nodeName}).\n`;
-      aspFacts += `latitude(${nodeName}, ${node.latitude}).\n`;
-      aspFacts += `longitude(${nodeName}, ${node.longitude}).\n`;
+      aspFacts += `latitude(${nodeName}, "${node.latitude}").\n`;
+      aspFacts += `longitude(${nodeName}, "${node.longitude}").\n`;
       if (node.demand) {
         aspFacts += `demand(${nodeName}, ${node.demand}).\n`;
       }
     });
-
-    // (b) Create a `vehicle(...)` fact for each vehicle
+    let i = 0;
+    // Generate vehicle facts
     vehicles.forEach((v) => {
-      const vehicleID = transliterate(v.vehicleName || '')
-        .toLowerCase()
-        .replace(/\s+/g, '');
-      aspFacts += `vehicle(${vehicleID}).\n`;
-      if (v.capacity) {
-        aspFacts += `capacity(${vehicleID}, ${v.capacity}).\n`;
-      }
-      // If you have more properties, e.g. v.fuel, etc.:
-      // aspFacts += `fuel(${vehicleID}, "${v.fuel}").\n`;
-      // ...
+        let vehicleID = 'vehicle_' + i++;
+        aspFacts += `vehicle(${vehicleID}).\n`;
+
+        for (const key in v) {
+            if (v[key] !== null && v[key] !== undefined) {
+                if (typeof v[key] === 'string') {
+                    let keyC = sanitizeAspString(v[key]);  // Ensure the string is sanitized
+                    aspFacts += `${key}(${vehicleID}, "${keyC}").\n`;
+                } else if (typeof v[key] === 'number') {
+                    // Check if the number is a float (i.e., has decimals)
+                    if (v[key] % 1 !== 0) {
+                        let roundNum = Math.round(v[key]);  // Round float to nearest integer
+                        aspFacts += `${key}(${vehicleID}, ${roundNum}).\n`;
+                    } else {
+                        aspFacts += `${key}(${vehicleID}, ${v[key]}).\n`;  // Keep integer as is
+                    }
+                } else {
+                    aspFacts += `${key}(${vehicleID}, ${v[key]}).\n`;  // Handle other types safely
+                }
+            }
+        }
     });
 
-    // (c) Distances: compute via Haversine & create distance(A,B,C).
-    const allDistances = computeAllDistances(nodes);
-    for (const dist of allDistances) {
-      const fromName = transliterate(dist.from || '')
-        .toLowerCase()
-        .replace(/\s+/g, '');
-      const toName = transliterate(dist.to || '')
-        .toLowerCase()
-        .replace(/\s+/g, '');
-      aspFacts += `distance(${fromName}, ${toName}, ${dist.distance}).\n`;
+
+    const addNumericFact = (predicate, ...args) => {
+      aspFacts += `${predicate}(${args.join(', ')}).
+`;
+    };
+
+
+    const locations = nodes.map((node) => [node.longitude, node.latitude]);
+
+    const pairs = generatePairs(locations);
+    const allRoutes = [];
+    const config1 = {ORS_key : "5b3ce3597851110001cf6248ac6c520907eb4dfa85df789d9ba10beb"};
+    for (const pair of pairs) {
+      const routes = await fetchAndAnalyzeRoutes(pair, config1);
+      // Now 'routes' is an array of route objects 
+      // but we also want to store the 'pair'
+      routes.forEach((r) => {
+        allRoutes.push({
+          fromCoord: pair[0],
+          toCoord: pair[1],
+          routeData: r,
+        });
+      });
     }
 
-    // 4. Return the ASP facts as plain text
-    return res.type('text/plain').send(aspFacts);
+    const alpha = 1.0;  // Weight for distance
+    const beta = 1.0;   // Weight for time
+    const gammaUp = 1.0;  // Weight for elevation gain
+    const gammaDown = 0.5;  // Weight for elevation loss (less impact)
+
+    allRoutes.forEach((route, index) => {
+      const {routeData} = route;
+      const routeId = `r${index + 1}`;
+      const routeId2 = `r${index + allRoutes.length +1}`;
+      console.log('Created routeid 1 with id -->', routeId, '\n');
+
+      console.log('Created routeid 2 with id -->', routeId2, '\n');
+      const fromNode = coordToNodeName(route.fromCoord);
+      const toNode = coordToNodeName(route.toCoord);
+
+      const distance = Math.round(routeData.distance) ?? 0;
+      const duration = Math.round(routeData.duration) ?? 0;
+      const elevationGain = routeData.elevationGain;
+      const elevationLoss = routeData.elevationLoss;
+      const totalStops = routeData.totalStops ?? 0;
+
+      const cost = (alpha * distance) + (beta * duration) + 
+      (gammaUp * elevationGain) - (gammaDown * elevationLoss);
+      
+      const cost2 = (alpha * distance) + (beta * duration) + 
+      (gammaUp * elevationLoss) - (gammaDown * elevationGain);
+
+      let roundedCost = Math.round(cost);
+      let roundedCost2 = Math.round(cost2);
+
+      aspFacts += `routeEdge(${routeId}, ${fromNode}, ${toNode}).\n`;
+      addNumericFact('route', routeId);
+      addNumericFact('time', routeId, duration);
+      addNumericFact('total_stops', routeId, totalStops);
+      addNumericFact('elevation_gain', routeId, elevationGain);
+      addNumericFact('elevation_loss', routeId, elevationLoss);
+      addNumericFact('cost', routeId, roundedCost, fromNode, toNode);
+
+      //aspFacts += `cycle(${fromNode}, ${toNode}).\n`;
+      // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${fromNode}).\n`;
+      // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${toNode}).\n`;
+      // aspFacts += `reached(${toNode}) :- cycle(1,${toNode}).`;
+      // aspFacts += `reached(${toNode}) :- cycle(${fromNode},${toNode}), reached(${fromNode}).`;
+      // aspFacts += `:- node(${toNode}), not reached(${toNode}).`;
+      // aspFacts += `#minimize{${cost},${fromNode},${toNode}: cycle(${fromNode},${toNode})}, cost(${routeId},${fromNode},${toNode}, ${cost}).\n`;
+    });
+    // allRoutes.forEach((route, index) => {
+    //    const {routeData} = route;
+    //    const routeId = `r${index + 1}`;
+
+    //   const fromNode = coordToNodeName(route.toCoord);
+    //   const toNode = coordToNodeName(route.fromCoord);
+
+    //   const distance = Math.round(routeData.distance) ?? 0;
+    //   const duration = Math.round(routeData.duration) ?? 0;
+    //   const elevationGain = routeData.elevationLoss;
+    //   const elevationLoss = routeData.elevationGain;
+    //   const totalStops = routeData.totalStops ?? 0;
+
+    //   const cost = (alpha * distance) + (beta * duration) + 
+    //   (gammaUp * elevationGain) - (gammaDown * elevationLoss);
+      
+    //   let roundedCost = Math.round(cost);
+
+    //   aspFacts += `routeEdge(${routeId}, ${fromNode}, ${toNode}).\n`;
+    //   addNumericFact('route', routeId);
+    //   addNumericFact('time', routeId, duration);
+    //   addNumericFact('total_stops', routeId, totalStops);
+    //   addNumericFact('elevation_gain', routeId, elevationGain);
+    //   addNumericFact('elevation_loss', routeId, elevationLoss);
+    //   addNumericFact('cost', routeId, roundedCost, fromNode, toNode); 
+    //   aspFacts += `cycle(${fromNode}, ${toNode}).\n`;
+    //   // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${fromNode}).\n`;
+    //   // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${toNode}).\n`;
+    //   // aspFacts += `reached(${toNode}) :- cycle(1,${toNode}).`;
+    //   // aspFacts += `reached(${toNode}) :- cycle(${fromNode},${toNode}), reached(${fromNode}).`;
+    //   // aspFacts += `:- node(${toNode}), not reached(${toNode}).`;
+    //   // aspFacts += `#minimize{${cost},${fromNode},${toNode}: cycle(${fromNode},${toNode})}, cost(${routeId},${fromNode},${toNode}, ${cost}).\n`;
+    // });
+
+
+
+
+    // Generate distance facts
+    const allDistances = computeAllDistances(nodes);
+    allDistances.forEach((dist) => {
+      let fromName = transliterate(dist.from || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
+      let toName = transliterate(dist.to || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
+      aspFacts += `distance(${fromName}, ${toName}, ${dist.distance}).\n`;
+    });
+    res.type('text/plain').send(aspFacts);
   } catch (err) {
     console.error('Error building ASP facts:', err);
     res.status(500).send('Error building ASP facts');
   }
 });
 
-// 7) run the python script that gets the results for each route from clingo
-router.get('/runPythonScript', async (req, res) => {
+
+router.get('/runPythonScript', (req, res) => {
   try {
-    // path to your python script & main .lp file
     const scriptPath = path.join(__dirname, 'clingoFiles', 'nemoClingoRouting.py');
-    const lpFilePath = path.join(__dirname, 'clingoFiles', 'nemoRouting4AdoXX.lp');
+    const lpFilePath = path.join(__dirname, 'clingoFiles', 'nemoRouting4AdoXX.pl');
+    console.log("Executing python file..");
+    childProcess = execFile(
+      'python3',
+      [scriptPath, lpFilePath],
+      { timeout: 70000 },
+      (err, stdout, stderr) => {
+        console.log('running py script..', stdout);
 
-    childProcess = execFile('python3', [scriptPath, lpFilePath], { timeout: 70000 }, (err, stdout, stderr) => {
-      if (err) {
-        console.error('Clingo execution error222:', err);
-        if (err.killed) {
-          return res.status(504).send('Clingo script timed out.');
+        if (err) {
+          console.error('Clingo execution error:', err);
+          if (err.killed) {
+            return res.status(504).send('Clingo script timed out.');
+          }
+          return res.status(500).send(err.message);
         }
-        return res.status(500).send(err.message);
-      }
-      if (stderr) {
-        console.error('Stderr from python script:', stderr);
-      }
-      // stdout presumably has the route facts as a list
-      console.log('Python script output:', stdout);
+        if (stderr) {
+          console.error('Stderr from python script:', stderr);
+        }
+        console.log('Python script output:', stdout);
 
-      let routeData;
-      try {
-        routeData = JSON.parse(stdout);
-      } catch (parseError) {
-        console.error('Could not parse JSON from stdout. Falling back...');
-        routeData = [];
-      }
+        // If your script prints JSON, parse it:
+        let routeData;
+        try {
+          routeData = JSON.parse(stdout);
+        } catch (parseError) {
+          console.error('Could not parse JSON from stdout. Falling back...');
+          routeData = [];
+        }
+        console.log('Finished executing python file..', stdout);
 
-      // Return as JSON to your UI
-      res.json({ routeData });
-    });
+        res.json({ routeData });
+      }
+    );
   } catch (error) {
     console.error('Error in /runPythonScript:', error);
     res.status(500).send('Error in runPythonScript');
   }
 });
+// ----------------------------------------------------------
 
-// 8) kill the /runPythonScript
+// ----------------------------------------------------------
+// 7) stopPythonScript
+// ----------------------------------------------------------
 router.get('/stopPythonScript', (req, res) => {
   if (childProcess) {
     processStoppedByUser = true;
-    childProcess.kill('SIGINT'); // Sending SIGINT to stop the process gracefully
-    console.log('Child process to retrieve CLINGO results stopped.', res.statusCode);
+    childProcess.kill('SIGINT');
     res.send('Clingo retrieval process stopped');
   } else {
     res.status(404).send('No process is running');
   }
 });
 
-// 9) delete all nodes from db
+// ----------------------------------------------------------
+// 8) deleteAllNodes
+// ----------------------------------------------------------
 router.delete('/deleteAllNodes', async (req, res) => {
+  const session = driver.session({ database: config.neo4jDatabase });
   try {
-    const session = driver.session({ database: config.neo4jDatabase });
-    // Write the Cypher query to delete all nodes from the Neo4j database
-    const deleteAllNodesQuery = `
-      MATCH (n)
-      DETACH DELETE n
-    `;
-    await session.run(deleteAllNodesQuery);
-    await session.close();
+    await session.run('MATCH (n) DETACH DELETE n');
     res.status(200).json({ message: 'All nodes deleted successfully' });
   } catch (error) {
-    console.error('Error deleting nodes:', error);
+    console.error('[ERROR] /deleteAllNodes:', error);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    session.close();
   }
 });
 
-// 10) delete all vehicles from db
+// ----------------------------------------------------------
+// 9) deleteAllVehicles
+// ----------------------------------------------------------
 router.delete('/deleteAllVehicles', async (req, res) => {
+  const session = driver.session({ database: config.neo4jDatabase });
   try {
-    const session = driver.session({ database: config.neo4jDatabase });
-    // Write the Cypher query to delete all vehicles from the Neo4j database
-    // Adjust if your vehicles are labeled :Vehicle or something else
-    const deleteAllVehiclesQuery = `
-      MATCH (v:Vehicle)
-      DETACH DELETE v
-    `;
-    await session.run(deleteAllVehiclesQuery);
-    await session.close();
+    await session.run('MATCH (v:Vehicle) DETACH DELETE v');
     res.status(200).json({ message: 'All vehicles deleted successfully' });
   } catch (error) {
-    console.error('Error deleting vehicles:', error);
+    console.error('[ERROR] /deleteAllVehicles:', error);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    session.close();
   }
 });
 
-// -----------------------------------------------------------------------------------
-// Start the server
+// ----------------------------------------------------------
+// Start server
+// ----------------------------------------------------------
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });

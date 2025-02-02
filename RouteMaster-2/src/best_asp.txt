@@ -2,8 +2,8 @@
 weight_duration(2). % Weight for duration
 weight_distance(1). % Weight for distance
 weight_elevation_gain(2).   % Penalty for uphill routes
-weight_elevation_loss(0). % Bonus for downhill
-penalty_air_pollution(0). % Penalty for air pollution score
+weight_elevation_loss(-1). % Bonus for downhill
+penalty_air_pollution(-1). % Penalty for air pollution score
 bonus_smartway_elite(10). % Bonus for "ELITE" smartway vehicles
 
 % Node and vehicle definitions
@@ -25,14 +25,11 @@ vehicle_score(V, Total) :-
     hwy_mpg(V, HMPG),
     cmb_mpg(V, CBMPG),
     greenhouse_gas_score(V, GGS),
-    penalty_air_pollution(PAP),  % Ensure PAP is assigned
+    penalty_air_pollution(PAP),
     bonus_smartway_elite(Bonus),
     is_smartway_elite(V, BonusMultiplier),
     BonusAmount = Bonus * BonusMultiplier,
-    PAPValue = PAP,  % Explicitly assign PAP to a variable
-    APSValue = APS,  % Explicitly assign APS to a variable
-    Total = APSValue + PAPValue + CMPG + HMPG + CBMPG - GGS + BonusAmount.
-
+    Total = ((-1) * APS * PAP ) + CMPG + HMPG + CBMPG - GGS + BonusAmount.
 
 % Maximum vehicle score
 max_vehicle_score(Max) :- Max = #max { Total : vehicle_score(_, Total) }.
@@ -64,7 +61,6 @@ tsp_node(X) :- cost(_, _, X, _).
 tsp_node(Y) :- cost(_, _, _, Y).
 
 1{ cycle(A, B) : routeEdge(_, A, B) }1 :- tsp_node(A).
-1{ cycle(A, B) : routeEdge(_, A, B) }1 :- tsp_node(B).
 
 total_cost(TotalCost) :-
     TotalCost = #sum { Cost : cycle(A, B), cost(RouteId, Cost, A, B) }.
