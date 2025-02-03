@@ -82,3 +82,7 @@ pos(X, 1) :- start_node(X).
 pos(Y, K+1) :- pos(X, K), cycle(X, Y), step(K), step(K+1).
 :- pos(X, K1), pos(X, K2), K1 != K2.
 :- pos(X1, K), pos(X2, K), X1 != X2.
+
+
+#show pos/2.
+#show best_vehicle/1.

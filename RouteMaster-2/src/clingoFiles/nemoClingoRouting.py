@@ -18,7 +18,7 @@ def run_clingo(main_lp_file):
 
     cmd = [
         "clingo",
-        main_lp_file,  # "nemoRouting4AdoXX.pl"
+        main_lp_file,
         "tempFacts.pl",
         "--opt-mode=optN",
         "--quiet=1,2"
@@ -55,20 +55,33 @@ def extract_best_solution_block(clingo_output):
 
 def parse_clingo_solution(solution_block):
 
-    route_facts = []
-    pattern = r'routeEdge\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\)'
-    matches = re.findall(pattern, solution_block)
-    for (vehicle, from_node, to_node) in matches:
-        route_facts.append((vehicle.strip(), from_node.strip(), to_node.strip()))
-    
-    return route_facts
+    data = {
+        "positions": [],
+        "best_vehicle": None
+    }
+
+    pattern_pos = r'pos\(\s*([^,]+)\s*,\s*(\d+)\s*\)'
+    matches_pos = re.findall(pattern_pos, solution_block)
+    for (node, step_str) in matches_pos:
+        data["positions"].append({
+            "node": node.strip(),
+            "step": int(step_str)
+        })
+
+    data["positions"].sort(key=lambda x: x["step"])
+
+    pattern_bv = r'best_vehicle\(\s*([^)]+)\s*\)'
+    matches_bv = re.findall(pattern_bv, solution_block)
+    if matches_bv:
+        data["best_vehicle"] = matches_bv[0].strip()
+
+    return data
 
 if __name__ == "__main__":
     main_lp = sys.argv[1] 
     full_output = run_clingo(main_lp)
 
     best_solution_text = extract_best_solution_block(full_output)
+    parsed_data = parse_clingo_solution(best_solution_text)
 
-    route_edges = parse_clingo_solution(best_solution_text)
-
-    print(json.dumps(route_edges, indent=2))
+    print(json.dumps(parsed_data, indent=2))
