@@ -75,3 +75,10 @@ total_cost(TotalCost) :-
 best_car_and_route(V, R) :-
     best_vehicle(V),
     best_route(R).
+
+num_nodes(N) :- N = #count { X : tsp_node(X) }.
+step(1..N) :- num_nodes(N).
+pos(X, 1) :- start_node(X).
+pos(Y, K+1) :- pos(X, K), cycle(X, Y), step(K), step(K+1).
+:- pos(X, K1), pos(X, K2), K1 != K2.
+:- pos(X1, K), pos(X2, K), X1 != X2.

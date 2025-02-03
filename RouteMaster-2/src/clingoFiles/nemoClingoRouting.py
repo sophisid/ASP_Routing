@@ -2,6 +2,7 @@ import requests
 import sys
 import subprocess
 import json
+import re
 
 def fetch_asp_facts():
     """GET the facts from your Node service."""
@@ -10,56 +11,64 @@ def fetch_asp_facts():
     return resp.text
 
 def run_clingo(main_lp_file):
-    # 1. Fetch ASP facts from Node
     asp_facts = fetch_asp_facts()
-    # 2. Write them to a temp file
+    
     with open("tempFacts.pl", "w") as f:
         f.write(asp_facts)
 
-    with open("tempFacts.pl", "r") as f:
-        temp_contents = f.read()
-    # print("tempFacts.pl contents:\n", temp_contents)
-    # 3. Run Clingo
     cmd = [
         "clingo",
-        main_lp_file,  # e.g., "nemoRouting4AdoXX.pl"
+        main_lp_file,  # "nemoRouting4AdoXX.pl"
         "tempFacts.pl",
         "--opt-mode=optN",
         "--quiet=1,2"
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    
     if "FOUND" not in result.stdout and "FOUND" not in result.stderr:
         raise Exception("Clingo did not find any solution or model.")
 
     return result.stdout
 
-def parse_clingo_solution(output):
-    """
-    Parse lines like:
-      route(v1,stopa,stopb) route(v1,stopb,stopc) ...
-    We'll extract them into a matrix or JSON.
-    """
-    # We'll look for lines that start with "route("
-    lines = output.splitlines()
-    route_facts = []
+def extract_best_solution_block(clingo_output):
+    lines = clingo_output.splitlines()
+    
+    best_solution_block = []
+    current_solution_block = []
+    in_answer_block = False
+    
     for line in lines:
-        if 'routeEdge(' in line:
-            # e.g. 'route(v1,stopa,stopb) route(v1,stopb,stopc)'
-            entries = line.strip().split()
-            for e in entries:
-                if e.startswith("routeEdge("):
-                    e = e.strip('.')  # remove trailing dot
-                    e = e.replace('routeEdge(', '').replace(')', '')
-                    parts = e.split(',')
-                    if len(parts) == 3:
-                        vehicle, fromNode, toNode = parts
-                        route_facts.append((vehicle, fromNode, toNode))
-    return json.dumps(route_facts)
+        if line.startswith("Answer:"):
+            in_answer_block = True
+            current_solution_block = []
+        elif line.startswith("OPTIMUM FOUND") or line.startswith("UNKNOWN"):
+            best_solution_block = current_solution_block
+            break
+        else:
+            if in_answer_block:
+                current_solution_block.append(line)
+
+    if current_solution_block and not best_solution_block:
+        best_solution_block = current_solution_block
+
+    return "\n".join(best_solution_block)
+
+def parse_clingo_solution(solution_block):
+
+    route_facts = []
+    pattern = r'routeEdge\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^)]+)\)'
+    matches = re.findall(pattern, solution_block)
+    for (vehicle, from_node, to_node) in matches:
+        route_facts.append((vehicle.strip(), from_node.strip(), to_node.strip()))
+    
+    return route_facts
 
 if __name__ == "__main__":
     main_lp = sys.argv[1] 
-    output = run_clingo(main_lp)
-    route_facts = parse_clingo_solution(output)
-    print(route_facts)  # or print JSON
+    full_output = run_clingo(main_lp)
 
+    best_solution_text = extract_best_solution_block(full_output)
 
+    route_edges = parse_clingo_solution(best_solution_text)
+
+    print(json.dumps(route_edges, indent=2))

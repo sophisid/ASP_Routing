@@ -1045,7 +1045,8 @@ router.get('/retrieveASPrules', async (req, res) => {
       console.log('index is --> ', j);
       // if its the index is 0
       if (j === 0) {
-        aspFacts += `start_node(${nodeName}).\n`;
+         nodeName = coordToNodeName([node.longitude, node.latitude]);
+          aspFacts += `start_node(${nodeName}).\n`;
       }
       j++;
 
