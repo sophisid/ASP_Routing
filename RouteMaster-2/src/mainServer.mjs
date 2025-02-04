@@ -1132,7 +1132,7 @@ router.get('/retrieveASPrules', async (req, res) => {
       const cost = (alpha * distance) + (beta * duration) + 
       (gammaUp * elevationGain) - (gammaDown * elevationLoss);
       
-      const cost2 = (alpha * distance) + (beta * duration) + 
+      const cost2 = (alpha * distance) + (beta*  duration) + 
       (gammaUp * elevationLoss) - (gammaDown * elevationGain);
 
       let roundedCost = Math.round(cost);
@@ -1206,7 +1206,6 @@ router.get('/retrieveASPrules', async (req, res) => {
       let toName = transliterate(dist.to || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
       aspFacts += `distance(${fromName}, ${toName}, ${dist.distance}).\n`;
     });
-
     res.type('text/plain').send(aspFacts);
   } catch (err) {
     console.error('Error building ASP facts:', err);
@@ -1237,7 +1236,7 @@ router.get('/runPythonScript', (req, res) => {
         if (stderr) {
           console.error('Stderr from python script:', stderr);
         }
-        console.log('Python script output:', stdout);
+        // console.log('Python script output:', stdout);
 
         // If your script prints JSON, parse it:
         let routeData;
