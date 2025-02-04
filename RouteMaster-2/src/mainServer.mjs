@@ -1043,15 +1043,16 @@ router.get('/retrieveASPrules', async (req, res) => {
         nodeName = 'node_' + nodeName;
       }
       console.log('index is --> ', j);
+      let coord_nodeName = coordToNodeName([node.longitude, node.latitude]);
       // if its the index is 0
       if (j === 0) {
-        aspFacts += `start_node(${nodeName}).\n`;
+        aspFacts += `start_node(${nodeName}, ${coord_nodeName}).\n`;
       }
       j++;
-
-      aspFacts += `node(${nodeName}).\n`;
-      aspFacts += `latitude(${nodeName}, "${node.latitude}").\n`;
-      aspFacts += `longitude(${nodeName}, "${node.longitude}").\n`;
+      nodeName = coordToNodeName([node.longitude, node.latitude]);
+      aspFacts += `node(${nodeName}, ${coord_nodeName}).\n`;
+      aspFacts += `latitude(${nodeName}, ${coord_nodeName} , "${node.latitude}").\n`;
+      aspFacts += `longitude(${nodeName}, ${coord_nodeName}, "${node.longitude}").\n`;
       if (node.demand) {
         aspFacts += `demand(${nodeName}, ${node.demand}).\n`;
       }
@@ -1144,6 +1145,14 @@ router.get('/retrieveASPrules', async (req, res) => {
       addNumericFact('elevation_gain', routeId, elevationGain);
       addNumericFact('elevation_loss', routeId, elevationLoss);
       addNumericFact('cost', routeId, roundedCost, fromNode, toNode);
+
+      aspFacts += `routeEdge(${routeId2}, ${toNode}, ${fromNode}).\n`;
+      addNumericFact('route', routeId2);
+      addNumericFact('time', routeId2, duration);
+      addNumericFact('total_stops', routeId2, totalStops);
+      addNumericFact('elevation_gain', routeId2, elevationLoss);
+      addNumericFact('elevation_loss', routeId2, elevationGain);
+      addNumericFact('cost', routeId2, roundedCost2, toNode, fromNode);
 
       //aspFacts += `cycle(${fromNode}, ${toNode}).\n`;
       // aspFacts +=`{ cycle(${fromNode}, ${toNode}) : routeEdge(${routeId}, ${fromNode}, ${toNode}) } = 1 :- node(${fromNode}).\n`;
