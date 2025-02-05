@@ -2,6 +2,7 @@ import requests
 import sys
 import subprocess
 import json
+import re
 
 def fetch_asp_facts():
     """GET the facts from your Node service."""
@@ -10,56 +11,91 @@ def fetch_asp_facts():
     return resp.text
 
 def run_clingo(main_lp_file):
-    # 1. Fetch ASP facts from Node
     asp_facts = fetch_asp_facts()
-    # 2. Write them to a temp file
+    
     with open("tempFacts.pl", "w") as f:
         f.write(asp_facts)
 
-    with open("tempFacts.pl", "r") as f:
-        temp_contents = f.read()
-    # print("tempFacts.pl contents:\n", temp_contents)
-    # 3. Run Clingo
     cmd = [
         "clingo",
-        main_lp_file,  # e.g., "nemoRouting4AdoXX.pl"
+        main_lp_file,
         "tempFacts.pl",
         "--opt-mode=optN",
         "--quiet=1,2"
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    
     if "FOUND" not in result.stdout and "FOUND" not in result.stderr:
         raise Exception("Clingo did not find any solution or model.")
 
     return result.stdout
 
-def parse_clingo_solution(output):
-    """
-    Parse lines like:
-      route(v1,stopa,stopb) route(v1,stopb,stopc) ...
-    We'll extract them into a matrix or JSON.
-    """
-    # We'll look for lines that start with "route("
-    lines = output.splitlines()
-    route_facts = []
+def extract_best_solution_block(clingo_output):
+    lines = clingo_output.splitlines()
+    
+    best_solution_block = []
+    current_solution_block = []
+    in_answer_block = False
+    
     for line in lines:
-        if 'routeEdge(' in line:
-            # e.g. 'route(v1,stopa,stopb) route(v1,stopb,stopc)'
-            entries = line.strip().split()
-            for e in entries:
-                if e.startswith("routeEdge("):
-                    e = e.strip('.')  # remove trailing dot
-                    e = e.replace('routeEdge(', '').replace(')', '')
-                    parts = e.split(',')
-                    if len(parts) == 3:
-                        vehicle, fromNode, toNode = parts
-                        route_facts.append((vehicle, fromNode, toNode))
-    return json.dumps(route_facts)
+        if line.startswith("Answer:"):
+            in_answer_block = True
+            current_solution_block = []
+        elif line.startswith("OPTIMUM FOUND") or line.startswith("UNKNOWN"):
+            best_solution_block = current_solution_block
+            break
+        else:
+            if in_answer_block:
+                current_solution_block.append(line)
+
+    if current_solution_block and not best_solution_block:
+        best_solution_block = current_solution_block
+
+    return "\n".join(best_solution_block)
+
+def parse_clingo_solution(solution_block):
+
+    data = {
+        "positions": [],
+        "label": [],
+        "best_vehicle": None,
+        "best_model": None
+    }
+
+    pattern_pos = r'pos\(\s*([^,]+)\s*,\s*(\d+)\s*\)'
+    matches_pos = re.findall(pattern_pos, solution_block)
+    for (node, step_str) in matches_pos:
+        data["positions"].append({
+            "node": node.strip(),
+            "step": int(step_str)
+        })
+
+    data["positions"].sort(key=lambda x: x["step"])
+
+    pattern_bv = r'best_vehicle\(\s*([^)]+)\s*\)'
+    matches_bv = re.findall(pattern_bv, solution_block)
+    if matches_bv:
+        data["best_vehicle"] = matches_bv[0].strip()
+
+    pattern_model = r'best_model\(\s*([^)]+)\s*\)'
+    matches_model = re.findall(pattern_model, solution_block)
+    if matches_model:
+        data["best_model"] = matches_model[0].strip()
+
+    pattern_label = r'label\(\s*([^,]+)\s*,\s*([^)]+)\s*\)'
+    matches_label = re.findall(pattern_label, solution_block)
+    for (node, label) in matches_label:
+        data["label"].append({
+            "node": node.strip(),
+            "label": label.strip()
+        })
+    return data
 
 if __name__ == "__main__":
     main_lp = sys.argv[1] 
-    output = run_clingo(main_lp)
-    route_facts = parse_clingo_solution(output)
-    print(route_facts)  # or print JSON
+    full_output = run_clingo(main_lp)
 
+    best_solution_text = extract_best_solution_block(full_output)
+    parsed_data = parse_clingo_solution(best_solution_text)
 
+    print(json.dumps(parsed_data, indent=2))

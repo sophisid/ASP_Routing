@@ -147,8 +147,19 @@ function computeAllDistances(stops) {
         B.longitude
       );
       const distRounded = Math.round(distMeters);
-      distances.push({ from: A.name, to: B.name, distance: distRounded });
-      distances.push({ from: B.name, to: A.name, distance: distRounded });
+      const fromNode = coordToNodeName([A.longitude, A.latitude]);
+      const toNode   = coordToNodeName([B.longitude, B.latitude]);
+
+      distances.push({
+        from: fromNode,
+        to:   toNode,
+        distance: distRounded
+      });
+      distances.push({
+        from: toNode,
+        to:   fromNode,
+        distance: distRounded
+      });
     }
   }
   return distances;
@@ -1038,18 +1049,20 @@ router.get('/retrieveASPrules', async (req, res) => {
     let j = 0;
     // Generate node facts
     nodes.forEach((node) => {
-      let nodeName = transliterate(node.name || '').toLowerCase().replace(/[^a-z0-9_\'\"]+/g, '');
-      if (!nodeName.match(/^[a-z]/)) {
-        nodeName = 'node_' + nodeName;
+      let nodeName2 = transliterate(node.name || '').toLowerCase().replace(/[^a-z0-9_'\"]+/g, '');
+      if (!nodeName2.match(/^[a-z]/)) {
+        nodeName2 = 'node_' + nodeName2;
       }
       console.log('index is --> ', j);
       // if its the index is 0
+      let nodeName = coordToNodeName([node.longitude, node.latitude]);
+
       if (j === 0) {
-        aspFacts += `start_node(${nodeName}).\n`;
+          aspFacts += `start_node(${nodeName}).\n`;
       }
       j++;
-
-      aspFacts += `node(${nodeName}).\n`;
+      aspFacts += `label(${nodeName}, "${nodeName2}").\n`;
+      aspFacts += `node(${nodeName}, ${nodeName2}).\n`;
       aspFacts += `latitude(${nodeName}, "${node.latitude}").\n`;
       aspFacts += `longitude(${nodeName}, "${node.longitude}").\n`;
       if (node.demand) {
@@ -1201,9 +1214,7 @@ router.get('/retrieveASPrules', async (req, res) => {
     // Generate distance facts
     const allDistances = computeAllDistances(nodes);
     allDistances.forEach((dist) => {
-      let fromName = transliterate(dist.from || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
-      let toName = transliterate(dist.to || '').toLowerCase().replace(/[^a-z0-9_]+/g, '');
-      aspFacts += `distance(${fromName}, ${toName}, ${dist.distance}).\n`;
+      aspFacts += `distance(${dist.from}, ${dist.to}, ${dist.distance}).\n`;
     });
     res.type('text/plain').send(aspFacts);
   } catch (err) {
