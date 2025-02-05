@@ -19,6 +19,7 @@ is_smartway_elite(X, 1) :- smartway(X, "ELITE").
 is_smartway_elite(X, 0) :- smartway(X, S), not S = "ELITE".
 
 vehicle_score(V, Total) :-
+    model(V, Model),
     vehicle(V),
     air_pollution_score(V, APS),
     city_mpg(V, CMPG),
@@ -37,6 +38,7 @@ vehicle_score(V, Total) :-
 % Maximum vehicle score
 max_vehicle_score(Max) :- Max = #max { Total : vehicle_score(_, Total) }.
 best_vehicle(V) :- vehicle_score(V, Total), max_vehicle_score(Total).
+best_model(M) :- best_vehicle(V), model(V, M).
 
 % Route scoring logic
 route_score(R, Total) :-
@@ -87,3 +89,4 @@ pos(Y, K+1) :- pos(X, K), cycle(X,Y), step(K), step(K+1).
 #show pos/2.
 #show label/2.
 #show best_vehicle/1.
+#show best_model/1.

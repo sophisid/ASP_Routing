@@ -58,7 +58,8 @@ def parse_clingo_solution(solution_block):
     data = {
         "positions": [],
         "label": [],
-        "best_vehicle": None
+        "best_vehicle": None,
+        "best_model": None
     }
 
     pattern_pos = r'pos\(\s*([^,]+)\s*,\s*(\d+)\s*\)'
@@ -75,6 +76,11 @@ def parse_clingo_solution(solution_block):
     matches_bv = re.findall(pattern_bv, solution_block)
     if matches_bv:
         data["best_vehicle"] = matches_bv[0].strip()
+
+    pattern_model = r'best_model\(\s*([^)]+)\s*\)'
+    matches_model = re.findall(pattern_model, solution_block)
+    if matches_model:
+        data["best_model"] = matches_model[0].strip()
 
     pattern_label = r'label\(\s*([^,]+)\s*,\s*([^)]+)\s*\)'
     matches_label = re.findall(pattern_label, solution_block)
