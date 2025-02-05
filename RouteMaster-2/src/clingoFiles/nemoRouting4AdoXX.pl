@@ -7,7 +7,7 @@ penalty_air_pollution(0). % Penalty for air pollution score
 bonus_smartway_elite(10). % Bonus for "ELITE" smartway vehicles
 
 % Node and vehicle definitions
-node(X) :- latitude(X, _), longitude(X, _).
+node(X,Y) :- latitude(X, _), longitude(X, _), label(X,Y).
 vehicle(X) :- 
     transmission(X, _), fuel(X, _), air_pollution_score(X, _),
     stnd(X, _), stnd_description(X, _), 
@@ -78,11 +78,12 @@ best_car_and_route(V, R) :-
 
 num_nodes(N) :- N = #count { X : tsp_node(X) }.
 step(1..N) :- num_nodes(N).
-pos(X, 1) :- start_node(X).
-pos(Y, K+1) :- pos(X, K), cycle(X, Y), step(K), step(K+1).
+pos(X, 1) :- start_node(X), label(X, Y).
+pos(Y, K+1) :- pos(X, K), cycle(X,Y), step(K), step(K+1).
 :- pos(X, K1), pos(X, K2), K1 != K2.
 :- pos(X1, K), pos(X2, K), X1 != X2.
 
 
 #show pos/2.
+#show label/2.
 #show best_vehicle/1.
